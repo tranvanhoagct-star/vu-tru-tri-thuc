@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chiếc Ba Lô Thần Kỳ - Phiêu Lưu Ký</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- FIREBASE CLOUD DATABASE (Giữ nguyên của anh) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+    <script>
+        window.initFirebase = () => {
+            try {
+                const firebaseConfig = {
+                    apiKey: "AIzaSyAOUyBAnI67bTSxx8jsmqQRbIQ7ZCYZEyc",
+                    authDomain: "kho-bau-tri-thuc.firebaseapp.com",
+                    projectId: "kho-bau-tri-thuc",
+                    storageBucket: "kho-bau-tri-thuc.firebasestorage.app",
+                    messagingSenderId: "165724720169",
+                    appId: "1:165724720169:web:530438c769e28bdd4ee038",
+                    measurementId: "G-M03LSYRN5Z"
+                };
+                
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                
+                window.db = firebase.firestore();
+                window.appId = 'rpg-balo-than-ky'; 
+
+                listenToLeaderboard();
+            } catch(e) { console.warn("Lỗi Firebase (Chuyển về Offline):", e); }
+        }
+
+        function listenToLeaderboard() {
+            if(!window.db) return;
+            try {
+                window.db.collection('artifacts').doc(window.appId).collection('public').doc('data').collection('leaderboard')
+                .onSnapshot((snapshot) => {
+                    let data = [];
+                    snapshot.forEach(doc => data.push(doc.data()));
+                    data.sort((a, b) => b.exp - a.exp); // Sắp xếp theo EXP
+                    data = data.slice(0, 30); 
+                    window.globalLeaderboardData = data;
+                    
+                    if(!document.getElementById('leaderboard-screen').classList.contains('hidden')) {
+                        window.renderLeaderboardUI(data);
+                    }
+                }, (error) => { console.error("Lỗi đồng bộ BXH:", error); });
+            } catch (e) {}
+        }
+
+        window.saveToFirebase = async (record) => {
+            if(!window.db) return false;
+            try {
+                await window.db.collection('artifacts').doc(window.appId).collection('public').doc('data').collection('leaderboard').add(record);
+                return true;
+            } catch(e) { return false; }
+        }
+
+        window.initFirebase();
+    </script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800;900&display=swap');
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #111827;
+            color: white;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* RPG Background Image Layer */
+        #game-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-size: cover;
+            background-position: center;
+            transition: background-image 1s ease-in-out;
+            z-index: 0;
+            filter: brightness(0.7);
+        }
+
+        /* RPG Dialog Box */
+        .dialog-box {
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 41, 59, 0.95) 100%);
+            border: 2px solid #64748b;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5), inset 0 0 15px rgba(255,255,255,0.1);
+            position: relative;
+        }
+
+        .name-plate {
+            position: absolute;
+            top: -20px; left: 20px;
+            background: linear-gradient(90deg, #3b82f6, #2563eb);
+            padding: 4px 20px;
+            border-radius: 8px;
+            font-weight: 900;
+            border: 2px solid #bfdbfe;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        /* Character Sprites */
+        .character-sprite {
+            position: absolute;
+            bottom: 35%; /* Đứng trên dialog box */
+            height: 50vh;
+            max-width: 40vw;
+            object-fit: contain;
+            transition: all 0.5s ease;
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5));
+        }
+        
+        .char-left { left: 5%; transform: scaleX(-1); }
+        .char-right { right: 5%; }
+        
+        .char-active { filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.4)); transform: translateY(-10px); }
+        .char-dim { filter: brightness(0.5); }
+
+        /* Custom Animations */
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        .anim-float { animation: float 3s ease-in-out infinite; }
+
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.9) translateY(20px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .anim-pop { animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+        .choice-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.2s;
+        }
+        .choice-btn:hover {
+            background: rgba(59, 130, 246, 0.4);
+            border-color: #60a5fa;
+            transform: translateX(10px);
+        }
+
+        /* Typing cursor */
+        .typing-cursor::after {
+            content: '▼';
+            animation: blink 1s step-end infinite;
+            margin-left: 5px;
+            font-size: 0.8em;
+            color: #60a5fa;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 10px; }
+    </style>
+</head>
+<body class="w-screen h-[100dvh] flex flex-col relative">
+
+    <!-- Lớp Background Image -->
+    <div id="game-bg" style="background-image: url('https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1920');"></div>
+
+    <!-- Thanh Trạng Thái (Top Bar) -->
+    <div id="top-bar" class="absolute top-0 left-0 w-full p-4 z-50 flex justify-between items-start pointer-events-none hidden">
+        <div class="flex gap-4 pointer-events-auto">
+            <!-- Sinh mệnh -->
+            <div class="bg-black/50 backdrop-blur-md px-4 py-2 rounded-xl border border-red-500/30">
+                <div class="text-[10px] text-red-400 font-bold uppercase tracking-wider mb-1">Sinh Mệnh</div>
+                <div id="lives-container" class="flex gap-1 text-xl">
+                    <span id="heart-1">❤️</span>
+                    <span id="heart-2">❤️</span>
+                    <span id="heart-3">❤️</span>
+                </div>
+            </div>
+            <!-- EXP -->
+            <div class="bg-black/50 backdrop-blur-md px-4 py-2 rounded-xl border border-blue-500/30 min-w-[120px]">
+                <div class="text-[10px] text-blue-400 font-bold uppercase tracking-wider mb-1">Điểm Kinh Nghiệm</div>
+                <div class="text-2xl font-black text-white flex items-center gap-2">
+                    <span id="exp-score">0</span> <span class="text-yellow-400 text-base">EXP</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-2 pointer-events-auto">
+            <button onclick="toggleBackpack()" class="bg-amber-600/80 hover:bg-amber-500 backdrop-blur-md p-3 rounded-full border border-amber-300 shadow-[0_0_15px_rgba(217,119,6,0.5)] transition-transform hover:scale-110">
+                🎒
+            </button>
+            <button onclick="resetToHome()" class="bg-black/50 backdrop-blur-md p-3 rounded-full border border-white/20 hover:bg-white/20 transition-transform hover:scale-110">
+                🏠
+            </button>
+        </div>
+    </div>
+
+    <!-- Màn Hình Trang Chủ -->
+    <div id="intro-screen" class="absolute inset-0 z-40 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+        <h1 class="text-5xl sm:text-7xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-b from-blue-400 to-emerald-400 drop-shadow-[0_0_20px_rgba(59,130,246,0.5)] tracking-tight">
+            CHIẾC BA LÔ THẦN KỲ
+        </h1>
+        <p class="text-gray-300 mb-8 max-w-lg text-lg">
+            Hóa thân thành anh cả Đăng, dẫn dắt em trai Khôi vượt qua Khu Rừng Kiến Thức. Đưa ra quyết định thông minh để giải đố và sinh tồn!
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4">
+            <button onclick="startGame()" class="py-4 px-10 rounded-2xl text-xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 shadow-[0_10px_30px_rgba(79,70,229,0.5)] hover:scale-105 transition-all text-white border border-blue-400">
+                ▶ BẮT ĐẦU PHIÊU LƯU
+            </button>
+            <button onclick="viewLeaderboard()" class="py-4 px-8 rounded-2xl text-xl font-black bg-white/10 border border-white/20 hover:bg-white/20 transition-all text-white flex items-center justify-center gap-2">
+                🏆 BẢNG XẾP HẠNG
+            </button>
+        </div>
+    </div>
+
+    <!-- Màn Hình Game (Layer Nhân vật & Thoại) -->
+    <div id="game-screen" class="absolute inset-0 z-10 hidden flex-col justify-end p-4 sm:p-8">
+        
+        <!-- Khu vực Nhân vật -->
+        <div id="character-layer" class="absolute inset-0 pointer-events-none">
+            <!-- Nhân vật mượn tạm ảnh minh họa, anh có thể thay URL bằng ảnh Sprite thực tế của anh -->
+            <img id="char-anh" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Dang&backgroundColor=transparent" class="character-sprite char-left anim-float opacity-0 hidden" alt="Đăng">
+            <img id="char-em" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Khoi&backgroundColor=transparent" class="character-sprite char-right anim-float opacity-0 hidden" alt="Khôi">
+        </div>
+
+        <!-- Khung Hội Thoại (Visual Novel Style) -->
+        <div id="dialog-container" class="dialog-box w-full max-w-5xl mx-auto p-6 sm:p-8 mb-4 pointer-events-auto anim-pop z-20">
+            <div id="speaker-name" class="name-plate hidden">Người Dẫn Truyện</div>
+            
+            <div id="dialog-text" class="text-lg sm:text-2xl font-semibold leading-relaxed text-gray-100 min-h-[80px]">
+                <!-- Chữ sẽ chạy hiệu ứng Typewriter ở đây -->
+            </div>
+
+            <!-- Khu vực lựa chọn rẽ nhánh -->
+            <div id="choices-container" class="mt-6 flex flex-col gap-3 hidden">
+                <!-- Nút bấm tạo động bằng JS -->
+            </div>
+
+            <!-- Khu vực Giải thích khi trả lời sai -->
+            <div id="feedback-container" class="mt-4 p-4 bg-red-900/40 border border-red-500/50 rounded-xl hidden">
+                <p class="text-red-300 font-bold mb-1"><i class="fas fa-exclamation-triangle"></i> Sai rồi!</p>
+                <p id="feedback-text" class="text-white text-sm sm:text-base italic"></p>
+                <button onclick="renderChoices()" class="mt-3 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold border border-white/20 transition-colors">
+                    🔄 Suy nghĩ và Chọn lại
+                </button>
+            </div>
+
+            <div id="click-to-continue" class="absolute bottom-4 right-6 text-gray-400 text-sm animate-pulse hidden cursor-pointer" onclick="nextAction()">
+                Nhấp để tiếp tục <i class="fas fa-caret-down"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Túi Đồ (Inventory) -->
+    <div id="backpack-modal" class="absolute inset-0 z-[100] bg-black/80 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="bg-gray-900 border border-amber-500/50 rounded-2xl w-full max-w-lg p-6 anim-pop relative shadow-[0_0_30px_rgba(217,119,6,0.2)]">
+            <button onclick="toggleBackpack()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl">&times;</button>
+            <h2 class="text-2xl font-black text-amber-400 mb-4 border-b border-amber-500/30 pb-2">🎒 Ba Lô Thần Kỳ</h2>
+            <div class="grid grid-cols-4 gap-4">
+                <!-- Các vật phẩm giả định -->
+                <div class="flex flex-col items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/10 cursor-not-allowed opacity-50" title="Chưa mở khóa">
+                    <div class="text-4xl">📏</div>
+                    <span class="text-xs font-bold text-gray-400">Thước Đo</span>
+                </div>
+                <div class="flex flex-col items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/10 cursor-not-allowed opacity-50">
+                    <div class="text-4xl">💻</div>
+                    <span class="text-xs font-bold text-gray-400">Bảng Lệnh</span>
+                </div>
+                <div class="flex flex-col items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/10 cursor-not-allowed opacity-50">
+                    <div class="text-4xl">🔍</div>
+                    <span class="text-xs font-bold text-gray-400">Kính Lúp</span>
+                </div>
+                <div class="flex flex-col items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/10 cursor-not-allowed opacity-50">
+                    <div class="text-4xl">🔌</div>
+                    <span class="text-xs font-bold text-gray-400">Cổng Logic</span>
+                </div>
+            </div>
+            <p class="text-sm text-gray-400 mt-6 italic text-center">Các vật phẩm sẽ tự động kích hoạt khi gặp tình huống tương ứng trong cốt truyện.</p>
+        </div>
+    </div>
+
+    <!-- Màn Hình Kết Quả & Leaderboard -->
+    <div id="leaderboard-screen" class="absolute inset-0 z-[110] bg-black/90 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="dialog-box w-full max-w-2xl p-8 text-center relative custom-scrollbar overflow-y-auto max-h-[90vh]">
+            <button onclick="resetToHome()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl">&times;</button>
+            
+            <div id="endgame-status" class="hidden mb-6 pb-6 border-b border-white/10">
+                <h2 id="end-title" class="text-4xl font-black text-emerald-400 mb-2">🎉 NHIỆM VỤ HOÀN THÀNH</h2>
+                <p class="text-gray-300 mb-4">Tổng Kinh Nghiệm (EXP) thu được:</p>
+                <div class="text-6xl font-black text-yellow-400 drop-shadow-md mb-6"><span id="final-exp">0</span></div>
+                
+                <div class="flex gap-2 justify-center max-w-sm mx-auto">
+                    <input type="text" id="player-name" placeholder="Nhập tên dũng sĩ..." class="w-full bg-black/50 border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500">
+                    <button onclick="saveScore()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-3 rounded-xl transition-colors whitespace-nowrap">
+                        Ghi Danh
+                    </button>
+                </div>
+            </div>
+
+            <h3 class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-4">🏆 BẢNG PHONG THẦN (EXP)</h3>
+            
+            <div class="bg-black/40 rounded-xl border border-white/10">
+                <div class="grid grid-cols-[50px_1fr_100px] gap-2 text-xs font-black text-gray-400 uppercase tracking-wider px-4 py-3 border-b border-white/10">
+                    <div class="text-center">Hạng</div>
+                    <div class="text-left">Dũng Sĩ</div>
+                    <div class="text-right">EXP</div>
+                </div>
+                <div id="leaderboard-list" class="max-h-[40vh] overflow-y-auto p-2">
+                    <div class="text-center text-gray-500 mt-4 animate-pulse">Đang tải dữ liệu vệ tinh...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AUDIO ELEMENTS -->
+    <audio id="sfx-typing" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_18c7c917ee.mp3" preload="auto"></audio>
+    <audio id="sfx-correct" src="https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3" preload="auto"></audio>
+    <audio id="sfx-wrong" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_78bc653426.mp3" preload="auto"></audio>
+    <audio id="sfx-level-up" src="https://cdn.pixabay.com/download/audio/2021/08/09/audio_820ddf51e0.mp3" preload="auto"></audio>
+
+<script>
+    // --- CẤU TRÚC DỮ LIỆU CỐT TRUYỆN (STORY NODES) ---
+    // Anh có thể thêm/bớt các nút tại đây để mở rộng game.
+    const storyNodes = {
+        "intro_1": {
+            bg: "https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1920", // Rừng rậm
+            speaker: "Người Dẫn Truyện",
+            text: "Trong một buổi cắm trại, hai anh em Đăng (anh cả) và Khôi (em út) vô tình đi lạc vào 'Khu Rừng Kiến Thức' bí ẩn.",
+            characters: [], // Chưa hiện nhân vật
+            next: "intro_2"
+        },
+        "intro_2": {
+            bg: "https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1920",
+            speaker: "Khôi (Em trai)",
+            text: "Anh Đăng ơi, em sợ quá! Rừng này kỳ lạ lắm, la bàn trên đồng hồ của em cũng bị hỏng rồi.",
+            characters: ["char-em"],
+            activeChar: "char-em",
+            next: "intro_3"
+        },
+        "intro_3": {
+            bg: "https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1920",
+            speaker: "Đăng (Anh trai)",
+            text: "Đừng lo Khôi! Chúng ta có Chiếc Ba Lô Thần Kỳ mẹ tặng. Bên trong có chứa các công cụ giải quyết vấn đề. Cứ đi theo anh!",
+            characters: ["char-anh", "char-em"],
+            activeChar: "char-anh",
+            next: "chap1_bridge"
+        },
+        "chap1_bridge": {
+            bg: "https://images.unsplash.com/photo-1506869640319-fea1a27530e0?q=80&w=1920", // Cầu gãy (ảnh minh họa núi)
+            speaker: "Người Dẫn Truyện",
+            text: "Đi được một đoạn, hai anh em bị chặn lại bởi một hẻm núi sâu. Cây cầu treo bằng gỗ đã bị mục gãy một đoạn ở giữa.",
+            characters: ["char-anh", "char-em"],
+            next: "chap1_bridge_choice"
+        },
+        "chap1_bridge_choice": {
+            bg: "https://images.unsplash.com/photo-1506869640319-fea1a27530e0?q=80&w=1920",
+            speaker: "Hệ thống Ba lô",
+            text: "CẢNH BÁO: Phát hiện chướng ngại vật! Ba lô đưa ra 2 công cụ trợ giúp. Hãy chọn cách giải quyết:",
+            characters: ["char-anh", "char-em"],
+            choices: [
+                {
+                    text: "[Toán Học] Dùng 'Thước đo ma thuật' và ván gỗ để tự ghép cầu.",
+                    action: "chap1_math_puzzle"
+                },
+                {
+                    text: "[Tin Học] Dùng 'Bảng lệnh' lập trình cho bầy ong robot giăng dây kéo qua.",
+                    action: "chap1_code_puzzle"
+                }
+            ]
+        },
+        // Nhánh Toán Học
+        "chap1_math_puzzle": {
+            bg: "https://images.unsplash.com/photo-1506869640319-fea1a27530e0?q=80&w=1920",
+            speaker: "Khôi (Em trai)",
+            text: "Đoạn cầu gãy có hình chữ nhật. Chiều dài là 4m, chiều rộng là 2m. Mình cần chọn tấm ván có diện tích bao nhiêu để lắp vừa khít anh nhỉ?",
+            characters: ["char-anh", "char-em"],
+            activeChar: "char-em",
+            choices: [
+                { text: "Tấm ván 6 mét vuông", isCorrect: false, feedback: "Anh nhầm rồi! Diện tích Hình chữ nhật = Dài x Rộng (4 x 2 = 8). Chứ không phải phép cộng đâu!" },
+                { text: "Tấm ván 8 mét vuông", isCorrect: true, exp: 50, next: "chap1_success" },
+                { text: "Tấm ván 2 mét vuông", isCorrect: false, feedback: "Nhỏ quá anh ơi, bước lên là lọt tòm xuống vực mất. Diện tích = Dài x Rộng cơ mà!" }
+            ]
+        },
+        // Nhánh Tin Học
+        "chap1_code_puzzle": {
+            bg: "https://images.unsplash.com/photo-1506869640319-fea1a27530e0?q=80&w=1920",
+            speaker: "Đăng (Anh trai)",
+            text: "Anh sẽ lập trình cho ong robot. Để ong bay sang bờ bên kia, thả dây xuống rồi quay lại, thuật toán tuần tự nào đúng?",
+            characters: ["char-anh", "char-em"],
+            activeChar: "char-anh",
+            choices: [
+                { text: "Nhả dây -> Bay sang -> Quay về", isCorrect: false, feedback: "Chưa sang bờ bên kia mà đã nhả dây thì rơi mất dây xuống vực rồi anh!" },
+                { text: "Bay sang -> Quay về -> Nhả dây", isCorrect: false, feedback: "Quay về chỗ cũ rồi mới nhả dây thì đâu có bắc qua vực được!" },
+                { text: "Bay sang -> Nhả dây -> Quay về", isCorrect: true, exp: 50, next: "chap1_success" }
+            ]
+        },
+        "chap1_success": {
+            bg: "https://images.unsplash.com/photo-1426604966848-d7adac402bff?q=80&w=1920", // Cảnh đẹp qua cầu
+            speaker: "Người Dẫn Truyện",
+            text: "Thành công! Giải pháp chính xác đã giúp hai anh em an toàn bước qua hẻm núi. Hành trình vẫn còn tiếp diễn...",
+            characters: ["char-anh", "char-em"],
+            next: "chap2_gate"
+        },
+        "chap2_gate": {
+            bg: "https://images.unsplash.com/photo-1518991043280-1da61d9f3ac5?q=80&w=1920", // Cửa đá cổ đại
+            speaker: "Khôi (Em trai)",
+            text: "Anh ơi, phía trước có một cánh cổng đá khổng lồ! Trên cổng khắc dòng chữ: 'Chỉ mở cửa khi CẢ HAI điều kiện đầu vào đều ĐÚNG'.",
+            characters: ["char-anh", "char-em"],
+            activeChar: "char-em",
+            next: "chap2_gate_choice"
+        },
+        "chap2_gate_choice": {
+            bg: "https://images.unsplash.com/photo-1518991043280-1da61d9f3ac5?q=80&w=1920",
+            speaker: "Đăng (Anh trai)",
+            text: "Anh nhớ kiến thức Tin học rồi! Cổng logic nào yêu cầu TẤT CẢ đầu vào đều đúng (TRUE) thì mới cho kết quả đúng nhỉ?",
+            characters: ["char-anh", "char-em"],
+            activeChar: "char-anh",
+            choices: [
+                { 
+                    text: "[Tin Học] Dùng 'Cổng Logic OR'", 
+                    isCorrect: false, 
+                    feedback: "Chưa chuẩn! Cổng OR chỉ cần MỘT trong hai điều kiện đúng là đã mở rồi, không đúng với yêu cầu khắc trên cửa." 
+                },
+                { 
+                    text: "[Tin Học] Dùng 'Cổng Logic AND'", 
+                    isCorrect: true, 
+                    exp: 80, 
+                    next: "chap2_success" 
+                },
+                { 
+                    text: "[Tin Học] Dùng 'Cổng Logic NOT'", 
+                    isCorrect: false, 
+                    feedback: "Cổng NOT là cổng đảo ngược (Đúng thành Sai), không thể dùng để gộp 2 điều kiện được em ạ!" 
+                }
+            ]
+        },
+        "chap2_success": {
+            bg: "https://images.unsplash.com/photo-1604871000636-074fa5117945?q=80&w=1920", // Kho báu
+            speaker: "Người Dẫn Truyện",
+            text: "Cánh cổng đá ầm ầm mở ra. Ánh sáng chói lóa phát ra từ một rương kho báu khổng lồ ở giữa phòng!",
+            characters: ["char-anh", "char-em"],
+            next: "chap3_chest_choice"
+        },
+        "chap3_chest_choice": {
+            bg: "https://images.unsplash.com/photo-1604871000636-074fa5117945?q=80&w=1920",
+            speaker: "Hệ thống Ba lô",
+            text: "Thử thách cuối cùng: Ổ khóa rương yêu cầu điền số tiếp theo vào dãy số sau đây: 2, 4, 8, 16, ...?",
+            characters: ["char-anh", "char-em"],
+            choices: [
+                { text: "[Toán Học] Điền số 24", isCorrect: false, feedback: "Sai quy luật rồi! Đây không phải là phép cộng thêm 8 đâu nhé." },
+                { text: "[Toán Học] Điền số 32", isCorrect: true, exp: 100, next: "chap4_intro" },
+                { text: "[Toán Học] Điền số 20", isCorrect: false, feedback: "Không đúng! Hãy thử quan sát mối liên hệ nhân đôi của các con số liền kề xem sao?" }
+            ]
+        },
+        "chap4_intro": {
+            bg: "https://images.unsplash.com/photo-1604871000636-074fa5117945?q=80&w=1920",
+            speaker: "Người Dẫn Truyện",
+            text: "Bên trong rương không phải vàng bạc, mà là một tấm bản đồ ma thuật dẫn đến 'Tháp Thời Gian' - nơi cất giấu nguồn tri thức vô tận của nhân loại.",
+            characters: ["char-anh", "char-em"],
+            next: "his_q1"
+        },
+        "his_q1": {
+            bg: "https://images.unsplash.com/photo-1599939571322-792a326e90ff?q=80&w=1920",
+            speaker: "Tượng Đá Lịch Sử",
+            text: "Muốn bước lên tháp, ngươi phải vượt qua 5 tầng Lịch Sử. Tầng 1: Cuộc cách mạng tư sản Pháp bùng nổ vào năm nào?",
+            characters: ["char-anh", "char-em"],
+            activeChar: "char-anh",
+            choices: [
+                { text: "Năm 1789", isCorrect: true, exp: 50, next: "his_q2" },
+                { text: "Năm 1798", isCorrect: false, feedback: "Năm 1789 mới đúng! Sự kiện quần chúng Paris đánh chiếm ngục Ba-xti đã mở đầu cho cách mạng." },
+                { text: "Năm 1688", isCorrect: false, feedback: "Đây là năm diễn ra Cách mạng tư sản Anh (Cách mạng Quang vinh) rồi anh ạ!" }
+            ]
+        },
+        "his_q2": {
+            bg: "https://images.unsplash.com/photo-1599939571322-792a326e90ff?q=80&w=1920",
+            speaker: "Tượng Đá Lịch Sử",
+            text: "Tầng 2: Quay về lịch sử nước Nam, vị tướng nào đã lãnh đạo nghĩa quân Yên Thế chống Pháp trong gần 30 năm?",
+            characters: ["char-anh", "char-em"],
+            choices: [
+                { text: "Hoàng Diệu", isCorrect: false, feedback: "Hoàng Diệu là vị tổng đốc đã tuẫn tiết khi bảo vệ thành Hà Nội năm 1882." },
+                { text: "Nguyễn Tri Phương", isCorrect: false, feedback: "Nguyễn Tri Phương lãnh đạo chống Pháp ở Đà Nẵng và Hà Nội, không phải khởi nghĩa nông dân Yên Thế." },
+                { text: "Hoàng Hoa Thám", isCorrect: true, exp: 50, next: "his_q3" }
+            ]
+        },
+        "his_q3": {
+            bg: "https://images.unsplash.com/photo-1599939571322-792a326e90ff?q=80&w=1920",
+            speaker: "Tượng Đá Lịch Sử",
+            text: "Tầng 3: Năm 1858, thực dân Pháp nổ súng xâm lược Việt Nam lần đầu tiên tại đâu?",
+            characters: ["char-anh", "char-em"],
+            choices: [
+                { text: "Bán đảo Sơn Trà (Đà Nẵng)", isCorrect: true, exp: 50, next: "his_q4" },
+                { text: "Gia Định (Sài Gòn)", isCorrect: false, feedback: "Pháp đánh Gia Định vào năm 1859, sau khi thất bại trong âm mưu đánh nhanh thắng nhanh ở Đà Nẵng." },
+                { text: "Thuận An (Huế)", isCorrect: false, feedback: "Pháp đánh cửa biển Thuận An vào năm 1883 để ép triều đình Huế đầu hàng." }
+            ]
+        },
+        "his_q4": {
+            bg: "https://images.unsplash.com/photo-1599939571322-792a326e90ff?q=80&w=1920",
+            speaker: "Tượng Đá Lịch Sử",
+            text: "Tầng 4: Bản hiệp ước nào đánh dấu sự đầu hàng hoàn toàn của triều đình nhà Nguyễn, biến Việt Nam thành thuộc địa của Pháp?",
+            characters: ["char-anh", "char-em"],
+            choices: [
+                { text: "Hiệp ước Nhâm Tuất (1862)", isCorrect: false, feedback: "Đây mới là hiệp ước cắt 3 tỉnh miền Đông Nam Kỳ cho Pháp thôi." },
+                { text: "Hiệp ước Pa-tơ-nốt (1884)", isCorrect: true, exp: 50, next: "his_q5" },
+                { text: "Hiệp ước Hác-măng (1883)", isCorrect: false, feedback: "Hác-măng là hiệp ước trước đó 1 năm, Pa-tơ-nốt mới là bản hiệp ước chấm dứt hoàn toàn độc lập." }
+            ]
+        },
+        "his_q5": {
+            bg: "https://images.unsplash.com/photo-1599939571322-792a326e90ff?q=80&w=1920",
+            speaker: "Tượng Đá Lịch Sử",
+            text: "Tầng 5: Phong trào Cần Vương (giúp vua cứu nước) bùng nổ ngay sau sự kiện lịch sử nào?",
+            characters: ["char-anh", "char-em"],
+            choices: [
+                { text: "Pháp đánh chiếm Bắc Kỳ lần 2", isCorrect: false, feedback: "Chưa chính xác! Phong trào Cần Vương do Tôn Thất Thuyết nhân danh vua Hàm Nghi phát động sau một sự kiện tại kinh thành." },
+                { text: "Cuộc phản công tại Kinh thành Huế (1885)", isCorrect: true, exp: 80, next: "math_intro" },
+                { text: "Vua Tự Đức qua đời", isCorrect: false, feedback: "Vua Tự Đức mất năm 1883, lúc này phong trào Cần Vương chưa diễn ra." }
+            ]
+        },
+        "math_intro": {
+            bg: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=1920",
+            speaker: "Người Dẫn Truyện",
+            text: "Vượt qua Tượng Đá Lịch Sử, hai anh em bước vào 'Mê Cung Không Gian' của Tháp Thời Gian. Nơi đây lơ lửng những con số và hình học ma thuật.",
+            characters: ["char-anh", "char-em"],
+            next: "math_q1"
+        },
+        "math_q1": {
+            bg: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=1920",
+            speaker: "Cửa Không Gian",
+            text: "Tầng 6: Khởi động với Đại số. Khai triển hằng đẳng thức (A + B)² ta được kết quả nào sau đây?",
+            characters: ["char-anh", "char-em"],
+            activeChar: "char-em",
+            choices: [
+                { text: "A² + B²", isCorrect: false, feedback: "Thiếu mất phần 2AB rồi! Khai triển đúng là A² + 2AB + B²." },
+                { text: "A² - 2AB + B²", isCorrect: false, feedback: "Đó là khai triển của bình phương một hiệu (A - B)² rồi!" },
+                { text: "A² + 2AB + B²", isCorrect: true, exp: 50, next: "math_q2" }
+            ]
+        },
+        "math_q2": {
+            bg: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=1920",
+            speaker: "Cửa Không Gian",
+            text: "Tầng 7: Trong Hình học 8, tổng các góc trong của một tứ giác lồi luôn bằng bao nhiêu độ?",
+            characters: ["char-anh", "char-em"],
+            choices: [
+                { text: "180 độ", isCorrect: false, feedback: "180 độ là tổng các góc của một tam giác. Tứ giác lớn hơn mà!" },
+                { text: "360 độ", isCorrect: true, exp: 50, next: "math_q3" },
+                { text: "270 độ", isCorrect: false, feedback: "Một tứ giác có thể chia thành 2 tam giác, nên tổng phải là 180 x 2 = 360 độ!" }
+            ]
+        },
+        "math_q3": {
+            bg: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=1920",
+            speaker: "Khôi (Em trai)",
+            text: "Tầng 8: Cửa hỏi một câu về Hình thang anh ạ! Một hình thang có hai đường chéo bằng nhau thì chắc chắn nó là hình gì?",
+            characters: ["char-anh", "char-em"],
+            activeChar: "char-em",
+            choices: [
+                { text: "Hình bình hành", isCorrect: false, feedback: "Hình bình hành có 2 đường chéo cắt nhau tại trung điểm, chưa chắc đã bằng nhau đâu!" },
+                { text: "Hình chữ nhật", isCorrect: false, feedback: "Hình chữ nhật đúng là có 2 đường chéo bằng nhau, nhưng hình thang có 2 đường chéo bằng nhau thì mới chỉ là Hình thang cân thôi!" },
+                { text: "Hình thang cân", isCorrect: true, exp: 50, next: "math_q4" }
+            ]
+        },
+        "math_q4": {
+            bg: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=1920",
+            speaker: "Cửa Không Gian",
+            text: "Tầng 9: Hãy tìm điều kiện xác định của một phân thức đại số A/B. Phân thức này có nghĩa khi nào?",
+            characters: ["char-anh", "char-em"],
+            activeChar: "char-anh",
+            choices: [
+                { text: "Khi A = 0", isCorrect: false, feedback: "Tử số A có thể bằng bất cứ giá trị nào. Quan trọng là mẫu số B không được phép bằng 0." },
+                { text: "Khi B ≠ 0", isCorrect: true, exp: 50, next: "math_q5" },
+                { text: "Khi B > 0", isCorrect: false, feedback: "Mẫu số B có thể là số âm, miễn là nó khác 0 là phân thức có nghĩa!" }
+            ]
+        },
+        "math_q5": {
+            bg: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=1920",
+            speaker: "Đăng (Anh trai)",
+            text: "Tầng 10 (Cuối cùng): Cửa yêu cầu tính diện tích hình thoi có độ dài 2 đường chéo là d1 và d2, anh em mình sẽ dùng công thức nào?",
+            characters: ["char-anh", "char-em"],
+            activeChar: "char-anh",
+            choices: [
+                { text: "S = d1 x d2", isCorrect: false, feedback: "Suýt đúng! Diện tích hình thoi bằng nửa tích hai đường chéo cơ." },
+                { text: "S = (d1 + d2) / 2", isCorrect: false, feedback: "Đó không phải là tính diện tích. Công thức đúng là nửa tích hai đường chéo: 1/2 x (d1 x d2)." },
+                { text: "S = 1/2 x (d1 x d2)", isCorrect: true, exp: 100, next: "game_end" }
+            ]
+        },
+        "game_end": {
+            bg: "https://images.unsplash.com/photo-1604871000636-074fa5117945?q=80&w=1920",
+            speaker: "Hệ Thống",
+            text: "CHÚC MỪNG! Bạn đã chinh phục Tháp Thời Gian, mở khóa toàn bộ Kho Báu Tri Thức và hoàn thành xuất sắc chuyến phiêu lưu!",
+            isEnd: true
+        },
+        "game_over": {
+            bg: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=1920", // Màn hình tối
+            speaker: "Hệ Thống",
+            text: "BẠN ĐÃ HẾT SINH MỆNH! Do đưa ra sai quyết định quá nhiều lần, 2 anh em không thể vượt qua khu rừng. Hãy học lại kiến thức và thử lại nhé.",
+            isEnd: true
+        }
+    };
+
+    // --- GAME ENGINE VARIABLES ---
+    let currentNodeId = "intro_1";
+    let currentEXP = 0;
+    let lives = 3;
+    let isTyping = false;
+    let typingInterval;
+    let currentRunId = null;
+
+    // --- AUDIO HELPER ---
+    function playAudioSafe(id, volume = 1.0) {
+        try {
+            const el = document.getElementById(id);
+            if (el) {
+                // Với âm thanh gõ chữ, không reset currentTime nếu đang phát để tránh giật cục
+                if (id !== 'sfx-typing') el.currentTime = 0;
+                el.volume = volume;
+                let playPromise = el.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => { /* Trình duyệt có thể chặn Autoplay cho đến khi người dùng click */ });
+                }
+            }
+        } catch(e) {}
+    }
+
+    // --- CORE FUNCTIONS ---
+    function startGame() {
+        document.getElementById('intro-screen').classList.add('hidden');
+        document.getElementById('top-bar').classList.remove('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+        document.getElementById('game-screen').classList.add('flex');
+        
+        currentEXP = 0;
+        lives = 3;
+        currentRunId = null;
+        updateStats();
+        updateLives();
+        
+        goToNode("intro_1");
+    }
+
+    function goToNode(nodeId) {
+        currentNodeId = nodeId;
+        const node = storyNodes[nodeId];
+        if (!node) return;
+
+        // Xóa giao diện cũ
+        clearInterval(typingInterval);
+        document.getElementById('choices-container').innerHTML = '';
+        document.getElementById('choices-container').classList.add('hidden');
+        document.getElementById('feedback-container').classList.add('hidden');
+        document.getElementById('click-to-continue').classList.add('hidden');
+        document.getElementById('dialog-text').classList.remove('typing-cursor');
+
+        // Cập nhật Background
+        if (node.bg) {
+            document.getElementById('game-bg').style.backgroundImage = `url('${node.bg}')`;
+        }
+
+        // Cập nhật Nameplate
+        const namePlate = document.getElementById('speaker-name');
+        if (node.speaker) {
+            namePlate.innerText = node.speaker;
+            namePlate.classList.remove('hidden');
+            // Đổi màu Nameplate tùy nhân vật
+            if(node.speaker.includes("Khôi")) namePlate.style.background = "linear-gradient(90deg, #10b981, #059669)";
+            else if(node.speaker.includes("Hệ")) namePlate.style.background = "linear-gradient(90deg, #ef4444, #dc2626)";
+            else namePlate.style.background = "linear-gradient(90deg, #3b82f6, #2563eb)";
+        } else {
+            namePlate.classList.add('hidden');
+        }
+
+        // Xử lý hiển thị Sprites Nhân vật
+        document.querySelectorAll('.character-sprite').forEach(el => {
+            el.classList.add('hidden', 'opacity-0');
+            el.classList.remove('char-active', 'char-dim');
+        });
+
+        if (node.characters && node.characters.length > 0) {
+            node.characters.forEach(charId => {
+                const charEl = document.getElementById(charId);
+                if (charEl) {
+                    charEl.classList.remove('hidden');
+                    setTimeout(() => charEl.classList.remove('opacity-0'), 50); // Fade in
+                    
+                    if (node.activeChar === charId) {
+                        charEl.classList.add('char-active');
+                    } else if (node.activeChar) {
+                        charEl.classList.add('char-dim'); // Làm tối nv không nói
+                    }
+                }
+            });
+        }
+
+        // Chạy Text Typewriter
+        typeWriterEffect(node.text, () => {
+            // Khi gõ chữ xong
+            if (node.isEnd) {
+                if(nodeId === 'game_end') playAudioSafe('sfx-level-up', 0.6);
+                setTimeout(() => showEndGame(), 2000);
+            } else if (node.choices) {
+                renderChoices();
+            } else if (node.next) {
+                document.getElementById('click-to-continue').classList.remove('hidden');
+            }
+        });
+
+        // Phát nhạc qua màn/thành công nếu node đó là một cột mốc chiến thắng
+        if(nodeId.includes('success')) {
+            playAudioSafe('sfx-level-up', 0.5);
+        }
+    }
+
+    function typeWriterEffect(text, callback) {
+        isTyping = true;
+        const textContainer = document.getElementById('dialog-text');
+        textContainer.innerHTML = '';
+        textContainer.classList.add('typing-cursor');
+        
+        let i = 0;
+        let typeSoundCounter = 0;
+        typingInterval = setInterval(() => {
+            if (i < text.length) {
+                textContainer.innerHTML += text.charAt(i);
+                
+                // Phát âm thanh gõ chữ nhẹ (cách mỗi 3 ký tự để không bị nhiễu)
+                if (text.charAt(i) !== ' ' && typeSoundCounter % 3 === 0) {
+                    playAudioSafe('sfx-typing', 0.1);
+                }
+                typeSoundCounter++;
+                i++;
+            } else {
+                clearInterval(typingInterval);
+                textContainer.classList.remove('typing-cursor');
+                isTyping = false;
+                if(callback) callback();
+            }
+        }, 30); // Tốc độ gõ chữ (ms)
+    }
+
+    // Nếu người chơi click chuột khi đang gõ chữ -> Hiện full text luôn
+    document.getElementById('dialog-container').addEventListener('click', () => {
+        if (isTyping) {
+            clearInterval(typingInterval);
+            const node = storyNodes[currentNodeId];
+            document.getElementById('dialog-text').innerHTML = node.text;
+            document.getElementById('dialog-text').classList.remove('typing-cursor');
+            isTyping = false;
+            
+            if (node.isEnd) setTimeout(() => showEndGame(), 1000);
+            else if (node.choices) renderChoices();
+            else if (node.next) document.getElementById('click-to-continue').classList.remove('hidden');
+        }
+    });
+
+    function nextAction() {
+        if (isTyping) return;
+        const node = storyNodes[currentNodeId];
+        if (node.next) goToNode(node.next);
+    }
+
+    function renderChoices() {
+        const node = storyNodes[currentNodeId];
+        const container = document.getElementById('choices-container');
+        document.getElementById('feedback-container').classList.add('hidden');
+        container.innerHTML = '';
+        container.classList.remove('hidden');
+
+        node.choices.forEach((choice, index) => {
+            const btn = document.createElement('button');
+            btn.className = "choice-btn w-full text-left px-6 py-4 rounded-xl text-white font-bold shadow-lg flex items-center";
+            btn.innerHTML = `<span class="mr-3 text-blue-400">➤</span> ${choice.text}`;
+            
+            btn.onclick = (e) => {
+                e.stopPropagation(); // Ngăn click lan ra khung thoại
+                handleChoice(choice);
+            };
+            container.appendChild(btn);
+        });
+    }
+
+    function handleChoice(choice) {
+        document.getElementById('choices-container').classList.add('hidden');
+
+        if (choice.action) {
+            // Chuyển sang một node khác không tính đúng sai (Rẽ nhánh cốt truyện)
+            goToNode(choice.action);
+        } 
+        else if (choice.isCorrect) {
+            // Trả lời đúng
+            playAudioSafe('sfx-correct', 0.6);
+            if(choice.exp) {
+                currentEXP += choice.exp;
+                updateStats();
+                fireConfetti();
+            }
+            goToNode(choice.next);
+        } 
+        else {
+            // Trả lời sai
+            playAudioSafe('sfx-wrong', 0.6);
+            lives--;
+            updateLives();
+            
+            const feedbackContainer = document.getElementById('feedback-container');
+            
+            // Mảng các câu khích lệ ngẫu nhiên
+            const encouragements = [
+                "Đừng nản chí nhé!", 
+                "Thất bại là mẹ thành công!", 
+                "Cố lên, thử một cách khác xem sao?", 
+                "Hít thở sâu và suy nghĩ lại nào!", 
+                "Sai một ly ta đi lại một dặm, không sao cả!"
+            ];
+            let randomEncourage = encouragements[Math.floor(Math.random() * encouragements.length)];
+            
+            // Hiển thị Lời khích lệ + Phần giải thích
+            document.getElementById('feedback-text').innerHTML = `<span class="text-yellow-400 font-bold block mb-1">💪 ${randomEncourage}</span>${choice.feedback || "Lựa chọn này không hợp lý. Hãy thử lại!"}`;
+            
+            feedbackContainer.classList.remove('hidden');
+            feedbackContainer.classList.add('anim-pop');
+
+            if (lives <= 0) {
+                setTimeout(() => goToNode("game_over"), 2000);
+            }
+        }
+    }
+
+    // --- UI HELPERS ---
+    function updateStats() {
+        document.getElementById('exp-score').innerText = currentEXP;
+    }
+
+    function updateLives() {
+        for(let i=1; i<=3; i++) {
+            let heart = document.getElementById(`heart-${i}`);
+            if(i <= lives) {
+                heart.style.filter = 'grayscale(0%)';
+                heart.style.opacity = '1';
+            } else {
+                heart.style.filter = 'grayscale(100%)';
+                heart.style.opacity = '0.3';
+            }
+        }
+    }
+
+    function toggleBackpack() {
+        const modal = document.getElementById('backpack-modal');
+        if(modal.classList.contains('hidden')) {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        } else {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    }
+
+    // --- ENDGAME & LEADERBOARD ---
+    function showEndGame() {
+        document.getElementById('game-screen').classList.add('hidden');
+        document.getElementById('top-bar').classList.add('hidden');
+        
+        const lbScreen = document.getElementById('leaderboard-screen');
+        lbScreen.classList.remove('hidden');
+        lbScreen.classList.add('flex');
+        
+        document.getElementById('endgame-status').classList.remove('hidden');
+        document.getElementById('final-exp').innerText = currentEXP;
+        
+        if(lives <= 0) {
+            document.getElementById('end-title').innerText = "💀 GAME OVER";
+            document.getElementById('end-title').classList.replace('text-emerald-400', 'text-red-500');
+        } else {
+            document.getElementById('end-title').innerText = "🎉 NHIỆM VỤ HOÀN THÀNH";
+            document.getElementById('end-title').classList.replace('text-red-500', 'text-emerald-400');
+        }
+
+        viewLeaderboard(true);
+    }
+
+    function viewLeaderboard(fromEndGame = false) {
+        document.getElementById('intro-screen').classList.add('hidden');
+        const lbScreen = document.getElementById('leaderboard-screen');
+        lbScreen.classList.remove('hidden'); lbScreen.classList.add('flex');
+        
+        if(!fromEndGame) {
+            document.getElementById('endgame-status').classList.add('hidden');
+        }
+
+        if (window.globalLeaderboardData) {
+            window.renderLeaderboardUI(window.globalLeaderboardData);
+        } else {
+            let localFallback = JSON.parse(localStorage.getItem('rpgLeaderboard')) || [];
+            if(localFallback.length > 0 && !window.db) window.renderLeaderboardUI(localFallback);
+        }
+    }
+
+    async function saveScore() {
+        if (currentRunId) return alert("Bạn đã ghi danh rồi!");
+        
+        let nameInput = document.getElementById('player-name').value.trim();
+        if (!nameInput) nameInput = "Dũng sĩ vô danh";
+
+        currentRunId = Date.now();
+        let record = { id: currentRunId, name: nameInput, exp: currentEXP };
+        
+        let savedToCloud = false;
+        if(window.saveToFirebase) {
+            document.querySelector('#endgame-status button').innerText = "⏳ Đang gửi...";
+            savedToCloud = await window.saveToFirebase(record);
+            document.querySelector('#endgame-status button').innerText = "Đã Ghi Danh";
+        }
+
+        if(!savedToCloud) {
+            // Fallback Offline
+            let leaderboard = JSON.parse(localStorage.getItem('rpgLeaderboard')) || [];
+            leaderboard.push(record);
+            leaderboard.sort((a, b) => b.exp - a.exp);
+            leaderboard = leaderboard.slice(0, 30);
+            localStorage.setItem('rpgLeaderboard', JSON.stringify(leaderboard));
+            window.renderLeaderboardUI(leaderboard);
+        }
+    }
+
+    window.renderLeaderboardUI = function(leaderboard) {
+        const listContainer = document.getElementById('leaderboard-list');
+        listContainer.innerHTML = '';
+
+        if(leaderboard.length === 0) {
+            listContainer.innerHTML = '<p class="text-gray-400 mt-4 text-center">Chưa có ai ghi danh.</p>';
+            return;
+        }
+
+        leaderboard.forEach((player, index) => {
+            let rankColor = "text-gray-400"; let rankMedal = `${index + 1}`;
+            if (index === 0) { rankColor = "text-yellow-400 font-black"; rankMedal = "🥇"; }
+            else if (index === 1) { rankColor = "text-gray-300 font-black"; rankMedal = "🥈"; }
+            else if (index === 2) { rankColor = "text-orange-400 font-black"; rankMedal = "🥉"; }
+
+            const item = document.createElement('div');
+            item.className = "grid grid-cols-[50px_1fr_100px] gap-2 items-center px-4 py-2 mb-2 bg-white/5 rounded-lg";
+            
+            item.innerHTML = `
+                <div class="text-center ${rankColor}">${rankMedal}</div>
+                <div class="text-left font-bold text-white truncate">${player.name}</div>
+                <div class="text-right font-black text-cyan-400">${player.exp}</div>
+            `;
+            listContainer.appendChild(item);
+        });
+    }
+
+    function resetToHome() {
+        document.getElementById('leaderboard-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.add('hidden');
+        document.getElementById('top-bar').classList.add('hidden');
+        document.getElementById('backpack-modal').classList.add('hidden');
+        
+        document.getElementById('intro-screen').classList.remove('hidden');
+        document.getElementById('player-name').value = '';
+    }
+
+    function fireConfetti() {
+        if (typeof confetti === 'function') {
+            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
+        }
+    }
+
+</script>
+</body>
+</html>

@@ -1,0 +1,1873 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kho Báu Tri Thức - EdTech Pro Edition</title>
+    <!-- Thư viện giao diện Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Thư viện hiệu ứng pháo giấy -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Thư viện SheetJS để đọc/xuất file Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- FIREBASE CLOUD DATABASE -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+    <script>
+        window.initFirebase = () => {
+            try {
+                // CẤU HÌNH DATABASE CHÍNH CHỦ
+                const firebaseConfig = {
+                    apiKey: "AIzaSyAOUyBAnI67bTSxx8jsmqQRbIQ7ZCYZEyc",
+                    authDomain: "kho-bau-tri-thuc.firebaseapp.com",
+                    projectId: "kho-bau-tri-thuc",
+                    storageBucket: "kho-bau-tri-thuc.firebasestorage.app",
+                    messagingSenderId: "165724720169",
+                    appId: "1:165724720169:web:530438c769e28bdd4ee038",
+                    measurementId: "G-M03LSYRN5Z"
+                };
+                
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                
+                window.db = firebase.firestore();
+                window.appId = 'kho-bau-tri-thuc'; 
+
+                listenToLeaderboard();
+            } catch(e) { console.warn("Lỗi Firebase (Chuyển về Offline):", e); }
+        }
+
+        function listenToLeaderboard() {
+            if(!window.db) return;
+            try {
+                window.db.collection('artifacts').doc(window.appId).collection('public').doc('data').collection('leaderboard')
+                .onSnapshot((snapshot) => {
+                    let data = [];
+                    snapshot.forEach(doc => data.push(doc.data()));
+                    data.sort((a, b) => b.iq - a.iq);
+                    data = data.slice(0, 30); 
+                    window.globalLeaderboardData = data;
+                    
+                    if(!document.getElementById('leaderboard-screen').classList.contains('hidden')) {
+                        window.renderLeaderboardUI(data);
+                    }
+                }, (error) => { console.error("Lỗi đồng bộ BXH:", error); });
+            } catch (e) {}
+        }
+
+        window.saveToFirebase = async (record) => {
+            if(!window.db) return false;
+            try {
+                await window.db.collection('artifacts').doc(window.appId).collection('public').doc('data').collection('leaderboard').add(record);
+                return true;
+            } catch(e) { return false; }
+        }
+
+        window.initFirebase();
+    </script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800;900&display=swap');
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background: linear-gradient(-45deg, #0f172a, #1e1b4b, #0f172a, #064e3b);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            color: white;
+            overflow: hidden;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        body.boss-mode {
+            background: linear-gradient(-45deg, #2a0000, #4a0000, #1a0000, #300000);
+            background-size: 400% 400%;
+            animation: gradientBG 5s ease infinite;
+        }
+        .boss-container {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 50px rgba(239, 68, 68, 0.4) !important;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .option-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            min-height: 55px;
+        }
+        
+        @media (hover: hover) {
+            .option-btn:hover:not(:disabled) {
+                background: rgba(255, 255, 255, 0.15);
+                transform: translateY(-3px) scale(1.01);
+                box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            }
+        }
+
+        .option-btn:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        .correct-ans {
+            background: linear-gradient(135deg, #10b981, #059669) !important;
+            border-color: #34d399 !important;
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+            color: white !important;
+            animation: popIn 0.3s ease-out forwards;
+        }
+
+        .wrong-ans {
+            background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+            border-color: #f87171 !important;
+            opacity: 0.8;
+            color: white !important;
+        }
+
+        .disabled-powerup {
+            opacity: 0.3;
+            pointer-events: none;
+            filter: grayscale(100%);
+        }
+        
+        .frozen-bar {
+            background: linear-gradient(90deg, #60a5fa, #93c5fd, #60a5fa) !important;
+            background-size: 200% 200%;
+            animation: gradientBG 2s ease infinite;
+            box-shadow: 0 0 20px #60a5fa;
+        }
+
+        #time-bar-container {
+            width: 100%;
+            background: rgba(0,0,0,0.5);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #time-bar {
+            height: 100%;
+            width: 100%;
+            background: #34d399;
+            transition: width 0.1s linear, background-color 0.3s;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px) rotate(-1deg); }
+            40%, 80% { transform: translateX(8px) rotate(1deg); }
+        }
+        .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.8) translateY(20px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .animate-pop { animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+            50% { box-shadow: 0 0 35px rgba(239, 68, 68, 0.8); }
+        }
+        .danger-mode { animation: pulse-red 0.5s infinite; border-color: rgba(239, 68, 68, 0.5); }
+
+        .combo-badge {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.5);
+        }
+
+        @keyframes heartBreak {
+            0% { transform: scale(1); filter: grayscale(0%); opacity: 1;}
+            50% { transform: scale(1.5); filter: grayscale(50%) brightness(2); }
+            100% { transform: scale(1); filter: grayscale(100%); opacity: 0.3; }
+        }
+        .heart-lost { animation: heartBreak 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+        .time-bonus-pop {
+            position: absolute;
+            font-weight: 900;
+            font-size: 1.8rem;
+            pointer-events: none;
+            animation: floatUp 1.2s cubic-bezier(0.2, 1, 0.2, 1) forwards;
+            text-shadow: 0 4px 15px rgba(0,0,0,0.8);
+            z-index: 60;
+        }
+        @keyframes floatUp {
+            0% { opacity: 0; transform: translateY(20px) scale(0.5); }
+            20% { opacity: 1; transform: translateY(0) scale(1.2); }
+            100% { opacity: 0; transform: translateY(-80px) scale(1); }
+        }
+
+        .explanation-box {
+            display: none;
+            animation: popIn 0.4s ease-out forwards;
+        }
+        .explanation-box.active {
+            display: block;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: -50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(to right, #10b981, #059669);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: bold;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            transition: bottom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 100;
+        }
+        #toast.show { bottom: 30px; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.4); }
+        
+        .shortcut-key {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.4);
+            border-radius: 4px;
+            padding: 0 4px;
+            font-size: 0.7rem;
+            margin-left: 4px;
+            color: #ccc;
+        }
+
+        .loader {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-2 sm:p-4 relative w-screen h-[100dvh] transition-colors duration-500">
+
+    <div class="absolute top-4 right-4 z-40 flex gap-2 sm:gap-3">
+        <button id="btn-pause" onclick="togglePause()" class="glass-panel hidden p-3 rounded-full text-xl sm:text-2xl transition-all hover:scale-110 shadow-[0_0_15px_rgba(255,255,255,0.1)] focus:outline-none" title="Tạm dừng">
+            ⏸️
+        </button>
+        <button id="fullscreen-toggle" onclick="toggleFullScreen()" class="glass-panel p-3 rounded-full text-xl sm:text-2xl transition-all hover:scale-110 shadow-[0_0_15px_rgba(255,255,255,0.1)] focus:outline-none" title="Toàn màn hình">
+            ⛶
+        </button>
+        <button id="sound-toggle" onclick="toggleSound()" class="glass-panel p-3 rounded-full text-xl sm:text-2xl transition-all hover:scale-110 shadow-[0_0_15px_rgba(255,255,255,0.1)] focus:outline-none" title="Bật/Tắt Âm thanh">
+            🔊
+        </button>
+    </div>
+    <div class="absolute top-4 left-4 z-40 text-xs text-gray-400 opacity-50 hidden sm:block font-semibold">
+        ⌨️ Phím tắt: A B C D | 1 2 3 | Tạm dừng: P
+    </div>
+
+    <div id="toast">✅ Thao tác thành công!</div>
+
+    <div id="pause-overlay" class="fixed inset-0 z-50 bg-black/90 hidden items-center justify-center backdrop-blur-md flex-col transition-all">
+        <div class="text-6xl mb-6 animate-bounce">⏸️</div>
+        <h2 id="pause-title" class="text-3xl sm:text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]">ĐANG TẠM DỪNG</h2>
+        <p id="pause-desc" class="text-gray-400 text-sm sm:text-base mb-8">Nghỉ ngơi chút nhé! Thời gian đã được đóng băng.</p>
+        <button onclick="togglePause()" class="py-4 px-10 rounded-2xl text-lg sm:text-xl font-black bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 shadow-[0_10px_30px_rgba(16,185,129,0.5)] transition-all text-white active:scale-95 focus:outline-none flex items-center gap-2">
+            ▶️ TIẾP TỤC CHƠI (P)
+        </button>
+    </div>
+
+    <!-- Modal MẬT KHẨU GIÁO VIÊN -->
+    <div id="auth-modal" class="fixed inset-0 bg-black/95 flex items-center justify-center hidden z-[110] p-4 backdrop-blur-md transition-all">
+        <div class="glass-panel w-full max-w-sm rounded-3xl p-6 sm:p-8 text-center relative border border-white/20 animate-pop">
+            <button onclick="closeAuthModal()" class="absolute top-4 right-5 text-gray-400 hover:text-white text-3xl focus:outline-none transition-transform hover:rotate-90">&times;</button>
+            <div class="text-4xl mb-4">🔒</div>
+            <h3 class="text-xl sm:text-2xl font-black mb-2 text-white drop-shadow-md">KHU VỰC GIÁO VIÊN</h3>
+            <p class="text-sm text-gray-400 mb-6">Vui lòng nhập mật khẩu để mở khóa hệ thống quản trị và nạp câu hỏi.</p>
+            <input type="password" id="teacher-password" placeholder="Nhập mật khẩu..." onkeypress="if(event.key === 'Enter') checkPassword()" class="w-full bg-black/50 border border-white/20 text-white font-bold rounded-xl px-4 py-3 mb-2 text-center focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all text-base tracking-widest shadow-inner">
+            <p id="auth-error" class="text-red-500 text-xs sm:text-sm font-bold hidden mb-4">❌ Mật khẩu không chính xác!</p>
+            <button onclick="checkPassword()" class="w-full mt-4 py-3 rounded-xl text-sm sm:text-base font-black bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 shadow-[0_5px_20px_rgba(16,185,129,0.4)] transition-all text-white active:scale-95 focus:outline-none">
+                🔑 MỞ KHÓA
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal Quản lý Data & AI -->
+    <div id="data-modal" class="fixed inset-0 bg-black/90 flex items-center justify-center hidden z-[100] p-4 backdrop-blur-sm transition-all">
+        <div class="glass-panel w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar rounded-3xl p-6 sm:p-8 relative border border-white/20">
+            <button onclick="closeDataModal()" class="absolute top-4 right-5 text-gray-400 hover:text-white text-3xl focus:outline-none transition-transform hover:rotate-90">&times;</button>
+            <h3 class="text-2xl sm:text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400 text-center">
+                ⚙️ HỆ THỐNG QUẢN TRỊ
+            </h3>
+            <p class="text-sm text-gray-300 mb-6 text-center">Tùy chỉnh bộ câu hỏi bằng cách tải file Excel hoặc dùng AI Giáo Sư Trí Tuệ.</p>
+            
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <button onclick="downloadTemplate()" class="w-full py-3 rounded-xl text-xs sm:text-sm font-bold bg-white/10 hover:bg-white/20 border border-white/20 transition-all flex flex-col items-center justify-center gap-1 focus:outline-none">
+                    <span class="text-lg">📥</span> File Mẫu Excel
+                </button>
+                <label for="upload-excel" class="w-full py-3 rounded-xl text-xs sm:text-sm font-bold bg-white/10 hover:bg-white/20 border border-white/20 transition-all cursor-pointer flex flex-col items-center justify-center gap-1">
+                    <span class="text-lg">📤</span> Tải lên File Excel
+                </label>
+                <input type="file" id="upload-excel" accept=".xlsx, .xls" class="hidden" onchange="importExcel(event)">
+            </div>
+
+            <div class="border border-purple-500/30 bg-purple-900/20 rounded-2xl p-4 mt-6">
+                <button onclick="toggleAIForm()" class="w-full text-left font-black text-purple-300 flex justify-between items-center focus:outline-none">
+                    <span class="flex items-center gap-2"><span class="text-xl">✨</span> TẠO CÂU HỎI BẰNG AI</span>
+                    <span id="ai-toggle-icon" class="text-lg transition-transform">▼</span>
+                </button>
+                
+                <div id="ai-form-container" class="hidden mt-4 space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold mb-1 block">Môn học</label>
+                            <input type="text" id="ai-subject" placeholder="VD: Lịch sử, Toán học..." class="w-full bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold mb-1 block">Độ khó</label>
+                            <select id="ai-difficulty" class="w-full bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none appearance-none">
+                                <option value="1">Dễ (Khởi động)</option>
+                                <option value="2" selected>Trung bình (Tăng tốc)</option>
+                                <option value="3">Khó (Giới hạn IQ)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 font-bold mb-1 block">Nội dung / Chủ đề cụ thể</label>
+                        <input type="text" id="ai-topic" placeholder="VD: Khởi nghĩa Hai Bà Trưng..." class="w-full bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 font-bold mb-1 block">Số lượng câu (Tối thiểu 3)</label>
+                        <input type="number" id="ai-count" min="3" value="3" class="w-full bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none">
+                    </div>
+                    <button id="btn-generate-ai" onclick="generateAIQuestions()" class="w-full mt-2 py-3 rounded-xl text-sm font-black bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 shadow-[0_0_15px_rgba(192,38,211,0.4)] transition-all flex items-center justify-center gap-2 focus:outline-none">
+                        <span>🚀 GỌI GIÁO SƯ TRÍ TUỆ BẮT ĐẦU TẠO</span>
+                    </button>
+                    <div id="ai-status" class="text-xs text-center font-semibold text-gray-300 hidden"></div>
+                </div>
+            </div>
+            
+            <div id="import-status" class="text-sm mt-4 font-bold hidden px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-center"></div>
+        </div>
+    </div>
+
+    <div id="intro-screen" class="glass-panel w-full max-w-xl max-h-full overflow-y-auto custom-scrollbar rounded-3xl p-6 sm:p-10 text-center animate-pop mx-auto flex flex-col justify-center border-t border-l border-white/20">
+        <div class="mx-auto mb-6 inline-flex items-center justify-center w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-gradient-to-br from-blue-500/30 to-purple-500/30 text-4xl sm:text-6xl shadow-[0_0_40px_rgba(59,130,246,0.5)] border border-white/10 animate-bounce">
+            🧠
+        </div>
+        <h1 class="text-3xl sm:text-5xl font-black mb-3 bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 leading-tight tracking-tight">
+            KHO BÁU TRI THỨC
+        </h1>
+        
+        <div id="best-iq-display" class="hidden mb-6 bg-black/30 rounded-2xl p-4 inline-block mx-auto border border-white/10">
+            <span class="text-gray-400 text-xs font-bold uppercase tracking-widest block mb-1">Kỷ lục cao nhất của bạn</span>
+            <div class="text-3xl sm:text-4xl font-black text-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.6)]">IQ <span id="best-iq-value">100</span></div>
+        </div>
+
+        <p class="text-gray-300 mb-8 text-sm sm:text-base px-2">
+            Đúng & Nhanh sẽ cộng <span class="text-emerald-400 font-bold">Nhiều IQ</span>. Sai sẽ trừ IQ và mất <span class="text-red-400 font-bold">Sinh mệnh ❤️</span>. Hết sinh mệnh = Bị Loại!
+        </p>
+        
+        <div class="flex flex-col sm:flex-row gap-3">
+            <button onclick="startGame()" class="flex-1 py-4 rounded-xl text-lg sm:text-xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-[0_10px_30px_rgba(79,70,229,0.5)] transition-all text-white active:scale-95 focus:outline-none">
+                🚀 VÀO PHÒNG THI
+            </button>
+            <div class="flex gap-3">
+                <button onclick="viewLeaderboard()" class="flex-1 sm:w-16 py-4 sm:py-0 rounded-xl text-2xl bg-white/10 hover:bg-white/20 border border-white/20 transition-all active:scale-95 flex items-center justify-center focus:outline-none" title="Xem bảng xếp hạng">
+                    🏆
+                </button>
+                <button onclick="openAuthModal()" class="flex-1 sm:w-16 py-4 sm:py-0 rounded-xl text-2xl bg-white/10 hover:bg-white/20 border border-white/20 transition-all active:scale-95 flex items-center justify-center focus:outline-none" title="Khu vực Giáo viên">
+                    ⚙️
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-screen" class="w-full max-w-2xl hidden mx-auto flex-col h-full justify-center relative">
+        <div class="flex justify-between items-start mb-2 px-1">
+            <div class="glass-panel px-4 py-2 rounded-2xl flex flex-col items-start border border-red-500/30 bg-red-900/10">
+                <span class="text-[10px] sm:text-xs text-red-300 font-bold uppercase tracking-wider mb-1">Sinh Mệnh</span>
+                <div id="lives-container" class="flex gap-1 text-xl sm:text-2xl">
+                    <span id="heart-1" class="transition-all duration-300">❤️</span>
+                    <span id="heart-2" class="transition-all duration-300">❤️</span>
+                    <span id="heart-3" class="transition-all duration-300">❤️</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col items-end gap-1">
+                <div id="combo-multiplier" class="hidden combo-badge px-3 py-1 rounded-full text-white font-black text-xs sm:text-sm border border-yellow-300/50">
+                    🔥 COMBO x2
+                </div>
+                <div id="streak-box" class="glass-panel px-4 py-1.5 rounded-2xl flex flex-col items-end min-w-[100px] border border-orange-500/30 bg-orange-900/10">
+                    <span class="text-[9px] sm:text-[10px] text-orange-300 font-bold uppercase tracking-wider">Chuỗi Đúng</span>
+                    <span class="text-lg sm:text-2xl font-black text-white flex items-center gap-1">
+                        <span id="streak-count">0</span> <span id="streak-icon" class="text-orange-400">⚡</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-between items-end mb-4 px-1">
+             <div class="glass-panel px-5 py-3 rounded-2xl flex flex-col items-start w-full border border-blue-500/40 bg-blue-900/20 relative overflow-hidden">
+                <div class="absolute right-0 top-0 h-full w-24 bg-gradient-to-l from-blue-500/20 to-transparent"></div>
+                <span class="text-[10px] sm:text-xs text-blue-300 font-bold uppercase tracking-wider">Chỉ số IQ Thực Tế</span>
+                <span id="iq-score" class="text-3xl sm:text-5xl font-black text-white drop-shadow-[0_0_15px_rgba(59,130,246,0.8)] transition-all duration-300">100</span>
+            </div>
+        </div>
+
+        <div id="time-bar-container" class="h-[6px] sm:h-[8px] mb-4">
+            <div id="time-bar"></div>
+        </div>
+
+        <div class="flex justify-between items-center mb-4 gap-2 px-1">
+            <button id="btn-5050" onclick="use5050()" class="flex-1 glass-panel py-2 rounded-xl text-xs sm:text-sm font-bold text-purple-300 hover:bg-purple-900/30 active:scale-95 transition-all flex flex-col items-center justify-center border-purple-500/30 focus:outline-none">
+                <span class="text-lg mb-1">🪄</span>
+                <span>Loại 50:50 <span class="shortcut-key hidden sm:inline">1</span></span>
+            </button>
+            <button id="btn-freeze" onclick="useFreeze()" class="flex-1 glass-panel py-2 rounded-xl text-xs sm:text-sm font-bold text-blue-300 hover:bg-blue-900/30 active:scale-95 transition-all flex flex-col items-center justify-center border-blue-500/30 focus:outline-none">
+                <span class="text-lg mb-1">❄️</span>
+                <span>Đóng Băng <span class="shortcut-key hidden sm:inline">2</span></span>
+            </button>
+            <button id="btn-swap" onclick="useSwap()" class="flex-1 glass-panel py-2 rounded-xl text-xs sm:text-sm font-bold text-emerald-300 hover:bg-emerald-900/30 active:scale-95 transition-all flex flex-col items-center justify-center border-emerald-500/30 focus:outline-none">
+                <span class="text-lg mb-1">🔄</span>
+                <span>Đổi Câu <span class="shortcut-key hidden sm:inline">3</span></span>
+            </button>
+        </div>
+
+        <div id="question-container" class="glass-panel rounded-3xl p-5 sm:p-8 mb-4 animate-pop relative transition-all duration-300 flex-shrink border border-white/20 flex flex-col">
+            <div class="flex justify-between items-center mb-4 sm:mb-6">
+                <span id="q-number-badge" class="text-xs sm:text-sm font-black bg-blue-500/20 text-blue-300 px-3 py-1.5 rounded-full border border-blue-500/50 shadow-[0_0_10px_rgba(59,130,246,0.2)]">
+                    Câu <span id="current-q-num">1</span>/<span id="total-q-num">20</span>
+                </span>
+                <span id="tier-badge" class="text-xs sm:text-sm font-black text-emerald-400 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30">Khởi Động</span>
+            </div>
+            
+            <h2 id="question-text" class="text-xl sm:text-2xl md:text-3xl font-bold leading-relaxed mb-6 text-white min-h-[80px] flex items-center">
+                Đang tải dữ liệu...
+            </h2>
+
+            <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 flex-1">
+                <!-- Khu vực render đáp án động -->
+            </div>
+
+            <div id="explanation-container" class="explanation-box mt-6 p-5 rounded-2xl bg-black/60 border border-white/20 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1.5 h-full bg-emerald-400" id="exp-indicator"></div>
+                <h4 class="text-xs sm:text-sm text-gray-400 font-bold uppercase mb-3 flex items-center gap-2">
+                    <span id="exp-icon" class="text-xl">👨‍🏫</span> <span class="tracking-widest">Giáo Sư Trí Tuệ Phân Tích:</span>
+                </h4>
+                <p id="explanation-text" class="text-sm sm:text-lg text-white font-medium leading-relaxed mb-5 italic">
+                    Nội dung giải thích sẽ hiển thị ở đây.
+                </p>
+                <button onclick="nextQuestion()" class="w-full py-3 rounded-xl text-sm sm:text-base font-black bg-white text-gray-900 shadow-[0_0_15px_rgba(255,255,255,0.4)] hover:bg-gray-200 transition-all active:scale-95 focus:outline-none">
+                    HIỂU RỒI, TIẾP TỤC! (Enter) ⏭️
+                </button>
+            </div>
+        </div>
+
+        <div id="psych-msg" class="text-center h-6 sm:h-8 font-black text-base sm:text-xl text-emerald-400 transition-opacity opacity-0 mt-auto drop-shadow-md"></div>
+    </div>
+
+    <div id="result-screen" class="glass-panel w-full max-w-xl max-h-full overflow-y-auto custom-scrollbar rounded-3xl p-6 sm:p-10 text-center hidden mx-auto flex flex-col justify-center border border-white/20">
+        <h2 id="result-main-title" class="text-sm sm:text-base font-bold text-gray-400 mb-2 uppercase tracking-widest">Đánh Giá Phân Tích Não Bộ</h2>
+        <div id="final-rank" class="text-3xl sm:text-5xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 via-yellow-500 to-orange-500 leading-tight">
+            THẦN ĐỒNG
+        </div>
+        
+        <div class="bg-black/40 rounded-3xl p-6 mb-6 inline-block relative mx-auto border border-white/10 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]">
+            <div id="new-record-badge" class="hidden absolute -top-4 -right-4 bg-gradient-to-r from-red-500 to-rose-600 text-white text-xs font-black px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(225,29,72,0.8)] animate-bounce border border-white/20">
+                🏆 KỶ LỤC MỚI!
+            </div>
+            <p class="text-gray-400 text-sm font-semibold mb-2">Chỉ số IQ Đạt Được</p>
+            <p id="final-iq" class="text-6xl sm:text-8xl font-black text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.4)]">185</p>
+        </div>
+
+        <div id="achievements-box" class="flex flex-wrap justify-center gap-2 mb-6 hidden"></div>
+
+        <p id="final-msg" class="text-gray-300 mt-2 mb-8 text-sm sm:text-lg font-medium">Bạn sở hữu tư duy logic vượt trội.</p>
+
+        <div class="space-y-3 w-full">
+            <div id="save-score-section" class="pt-4 border-t border-white/10">
+                <input type="text" id="player-name" maxlength="20" placeholder="Nhập tên của bạn để lưu danh..." class="w-full bg-black/40 border border-white/20 text-white font-bold rounded-xl px-4 py-4 mb-3 text-center focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all text-sm sm:text-base">
+                <button onclick="saveScore()" class="w-full py-4 rounded-xl text-sm sm:text-base font-black bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 shadow-[0_5px_20px_rgba(16,185,129,0.4)] transition-all text-white active:scale-95 focus:outline-none">
+                    💾 GHI DANH BẢNG XẾP HẠNG ONLINE
+                </button>
+            </div>
+            
+            <button onclick="shareResult()" class="w-full py-3 rounded-xl text-sm sm:text-base font-bold bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 shadow-[0_0_15px_rgba(217,70,239,0.4)] transition-all text-white active:scale-95 flex items-center justify-center gap-2 focus:outline-none">
+                🔥 KHOE THÀNH TÍCH
+            </button>
+
+            <button onclick="resetToHome()" class="w-full py-3 rounded-xl text-sm sm:text-base font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all active:scale-95 focus:outline-none">
+                🏠 VỀ TRANG CHỦ LÀM LẠI
+            </button>
+        </div>
+    </div>
+
+    <div id="leaderboard-screen" class="glass-panel w-full max-w-xl max-h-[90vh] flex flex-col rounded-3xl p-6 sm:p-8 text-center hidden relative z-10 mx-auto border border-white/20">
+        <h2 class="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-2 flex items-center justify-center gap-2 flex-shrink-0 drop-shadow-md">
+            🏆 BẢNG PHONG THẦN
+        </h2>
+        <p class="text-xs text-emerald-400 font-bold mb-4 uppercase tracking-widest">(Đồng bộ máy chủ Cloud Thời gian thực)</p>
+        
+        <div class="bg-black/40 rounded-2xl p-2 mb-6 flex-1 flex flex-col min-h-0 border border-white/10">
+            <div class="grid grid-cols-[1fr_4fr_2fr] gap-2 text-xs font-black text-gray-400 uppercase tracking-wider px-4 py-3 border-b border-white/10 flex-shrink-0">
+                <div class="text-center">Hạng</div>
+                <div class="text-left">Danh Tính</div>
+                <div class="text-right">Chỉ số IQ</div>
+            </div>
+            <div id="leaderboard-list" class="flex-1 overflow-y-auto custom-scrollbar pt-2 px-1 max-h-[50vh]">
+                <div class="text-center text-gray-500 mt-10 animate-pulse">Đang kết nối vệ tinh lấy dữ liệu...</div>
+            </div>
+        </div>
+
+        <button onclick="resetToHome()" class="w-full py-4 rounded-xl text-sm sm:text-lg font-black bg-white text-gray-900 shadow-[0_0_20px_rgba(255,255,255,0.4)] hover:bg-gray-200 transition-all active:scale-95 flex-shrink-0 focus:outline-none">
+            VỀ MÀN HÌNH CHÍNH
+        </button>
+    </div>
+
+    <audio id="sfx-correct" src="https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3" preload="auto"></audio>
+    <audio id="sfx-wrong" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_78bc653426.mp3" preload="auto"></audio>
+    <audio id="sfx-powerup" src="https://cdn.pixabay.com/download/audio/2021/08/04/audio_12b0c7443c.mp3" preload="auto"></audio>
+    <audio id="bgm-normal" src="https://cdn.pixabay.com/download/audio/2022/01/21/audio_31743c58bb.mp3" loop preload="auto"></audio>
+    <audio id="bgm-tense" src="https://cdn.pixabay.com/download/audio/2021/11/25/audio_91b3cb81ed.mp3" loop preload="auto"></audio>
+
+<script>
+    // --- NGÂN HÀNG 20 CÂU HỎI MẶC ĐỊNH (Tích hợp Đa định dạng) ---
+    // Cấu trúc: type: 'mcq' (Trắc nghiệm), 'fill' (Điền khuyết), 'drag' (Kéo thả/Chạm ghép)
+    const tier1 = [
+        { type: "mcq", q: "Có 3 quả táo trên bàn, bạn lấy đi 2 quả. Bạn có bao nhiêu quả táo?", a: ["0 quả", "1 quả", "2 quả", "3 quả"], c: 2, exp: "Khà khà, trò lấy đi 2 quả táo thì tất nhiên trên tay trò đang cầm 2 quả rồi!" },
+        { type: "mcq", q: "Bố của Hoa có 4 người con gái: Xuân, Hạ, Thu. Người thứ 4 tên là gì?", a: ["Hoa", "Đông", "Tuyết", "Không biết"], c: 0, exp: "Câu hỏi đã nói rõ là 'Bố của Hoa' rồi cơ mà. Người còn lại chính là Hoa chứ ai!" },
+        { type: "mcq", q: "Trong một cuộc chạy thi, nếu bạn vượt qua người chạy thứ 2 thì bạn đang đứng thứ mấy?", a: ["Thứ 1", "Thứ 2", "Thứ 3", "Cuối cùng"], c: 1, exp: "Vượt người thứ 2 thì trò chiếm lấy vị trí của họ, nên trò sẽ đứng thứ 2 nhé." },
+        { type: "mcq", q: "Ai là người dời đô từ Hoa Lư về Thăng Long năm 1010?", a: ["Lý Thái Tổ", "Lý Thái Tông", "Đinh Tiên Hoàng", "Lê Lợi"], c: 0, exp: "Năm 1010, vua Lý Công Uẩn (Lý Thái Tổ) đã ban Chiếu dời đô từ Hoa Lư về thành Đại La (Thăng Long)." },
+        { type: "mcq", q: "Cuộc khởi nghĩa của Hai Bà Trưng bùng nổ vào năm nào?", a: ["Năm 40", "Năm 248", "Năm 938", "Năm 542"], c: 0, exp: "Mùa xuân năm 40 (sau Công Nguyên), Hai Bà Trưng phất cờ khởi nghĩa đập tan ách thống trị của nhà Đông Hán." },
+        { type: "mcq", q: "Điền vào chỗ trống: 'Ăn quả nhớ kẻ trồng cây / Ăn khoai nhớ kẻ cho... mà trồng.'", a: ["Dây", "Củ", "Lá", "Nước"], c: 0, exp: "Giáo sư nhắc trò nhớ câu ca dao về lòng biết ơn: 'Ăn khoai nhớ kẻ cho dây mà trồng'." },
+        { type: "mcq", q: "Chuồn chuồn bay thấp thì mưa / Bay cao thì nắng, bay vừa thì...", a: ["Râm", "Bão", "Mát", "Lụt"], c: 0, exp: "Kinh nghiệm dự báo thời tiết của ông cha ta: bay vừa thì 'Râm' (tức là râm mát)." },
+        { type: "fill", q: "Điền một từ còn thiếu vào câu thành ngữ sau: 'Gần mực thì đen, gần ... thì rạng.'", c: "đèn", exp: "Câu tục ngữ nhắc nhở về môi trường sống: Gần mực (xấu) thì đen, gần ĐÈN (tốt, sáng) thì rạng rỡ." }
+    ];
+    const tier2 = [
+        { type: "mcq", q: "Bệnh gì mà bác sĩ giỏi đến mấy cũng phải bó tay?", a: ["Bệnh gãy tay", "Bệnh nan y", "Bệnh viện", "Bệnh cảm"], c: 0, exp: "Đố vui chút thôi! Gãy tay thì bác sĩ phải 'bó tay' (bó bột) để chữa chứ sao!" },
+        { type: "mcq", q: "Tháng nào trong năm có 28 ngày?", a: ["Mọi tháng", "Tháng 2", "Không tháng nào", "Tháng 4"], c: 0, exp: "Đừng vội vàng! Tất cả 12 tháng trong năm đều có ít nhất 28 ngày trò nhé." },
+        { type: "mcq", q: "100 chia cho một nửa, sau đó cộng thêm 50 bằng bao nhiêu?", a: ["250", "100", "150", "52"], c: 0, exp: "Trò nhớ nhé: Chia cho 'một nửa' (0.5) tức là nhân 2. Vậy 100 x 2 = 200, cộng 50 là 250." },
+        { type: "mcq", q: "Giải phương trình: 2x - 6 = 14. Giá trị của x là?", a: ["10", "4", "8", "20"], c: 0, exp: "Chuyển vế đổi dấu: 2x = 14 + 6 = 20. Suy ra x = 10." },
+        { type: "mcq", q: "Một xe đi từ A đến B với vận tốc 40km/h và về với vận tốc 60km/h. Vận tốc trung bình cả đi lẫn về là?", a: ["48 km/h", "50 km/h", "52 km/h", "45 km/h"], c: 0, exp: "Công thức vận tốc TB = (2*v1*v2)/(v1+v2) = (2*40*60)/(100) = 48 km/h." },
+        { type: "fill", q: "Tìm quy luật và điền số tiếp theo vào dãy: 2, 5, 10, 17, ___", c: "26", exp: "Quy luật cộng các số lẻ liên tiếp: +3, +5, +7. Vậy số tiếp theo cộng thêm 9 là 17 + 9 = 26." },
+        { type: "mcq", q: "Trận chiến 'Điện Biên Phủ trên không' bảo vệ bầu trời Hà Nội diễn ra năm nào?", a: ["1972", "1954", "1968", "1975"], c: 0, exp: "Tháng 12 năm 1972, quân dân ta đã đập tan cuộc tập kích chiến lược bằng B-52 của đế quốc Mỹ." },
+        { type: "mcq", q: "Vị hoàng đế nào đã làm nên chiến thắng Ngọc Hồi - Đống Đa năm Kỷ Dậu (1789)?", a: ["Quang Trung", "Lê Lợi", "Trần Hưng Đạo", "Gia Long"], c: 0, exp: "Chính là Vua Quang Trung (Nguyễn Huệ) đại phá quân Thanh vang dội lịch sử!" },
+        { type: "mcq", q: "Điền vào chỗ trống: 'Thương người như thể thương...'", a: ["Thân", "Mình", "Con", "Em"], c: 0, exp: "Tục ngữ khuyên răn chúng ta phải biết yêu thương người khác như yêu thương chính bản thân mình (Thân)." }
+    ];
+    const tier3 = [
+        { type: "mcq", q: "Trong hồ có một cụm bèo, mỗi ngày diện tích bèo tăng gấp đôi. Mất 48 ngày để bèo phủ kín hồ. Hỏi mất bao lâu để phủ nửa hồ?", a: ["47 ngày", "24 ngày", "46 ngày", "12 ngày"], c: 0, exp: "Trò mắc bẫy rồi! Vì mỗi ngày bèo tăng gấp đôi, nên trước ngày thứ 48 (kín hồ) một ngày, tức là ngày thứ 47 bèo đã phủ được một nửa hồ." },
+        { type: "mcq", q: "Hiện nay tổng tuổi của 2 cha con là 50. Biết 5 năm nữa tuổi cha gấp 3 lần tuổi con. Hỏi hiện nay con bao nhiêu tuổi?", a: ["10 tuổi", "5 tuổi", "15 tuổi", "12 tuổi"], c: 0, exp: "Năm năm nữa, tổng tuổi 2 người là 50 + 10 = 60. Cha gấp 3 con (tổng 4 phần), vậy con là 60/4 = 15 tuổi. Hiện tại con sẽ là: 15 - 5 = 10 tuổi." },
+        { type: "drag", q: "Sắp xếp các triều đại phong kiến Việt Nam theo thứ tự thời gian xuất hiện trước - sau:", c: ["Nhà Đinh", "Nhà Lý", "Nhà Trần", "Nhà Lê"], exp: "Thứ tự chính xác là: Đinh Tiên Hoàng (968), Lý Thái Tổ (1009), Trần Thái Tông (1225), và Lê Thái Tổ (1428)." }
+    ];
+
+    let questions = [];
+    let reserveQuestions = []; 
+    let aiQuestionsQueue = []; 
+    let currentIndex = 0;
+    
+    let baseIQ = 100;
+    let currentIQ = 100;
+    let streak = 0;
+    let lives = 3; 
+    
+    let isClickable = false;
+    let isShowingExplanation = false;
+    let isGameRunning = false;
+    let isPaused = false;
+    let currentCorrectIndex = 0;
+    let isSoundOn = true;
+
+    let timerInterval;
+    let freezeTimeout;
+    let currentTotalTime = 12000;
+    let timeLeft = 12000;
+
+    let used5050 = false;
+    let usedFreeze = false;
+    let usedSwap = false;
+    let isBossLevel = false;
+    let comboMultiplier = 1;
+    let fastCorrectStreak = 0;
+    let maxFastCorrectStreak = 0;
+    let achievedClutch = false; 
+    let currentRunId = null;
+
+    const praiseWords = ["Giáo sư cũng phải nể phục!", "Quá xuất sắc, trò cưng!", "Tư duy đỉnh cao của thế kỷ!", "Không thể cản bước!", "Thiên tài logic!"];
+    const comfortWords = ["Sập bẫy của giáo sư rồi!", "Cẩn thận hơn nhé nhà bác học!", "Áp lực thời gian à?", "Câu này hơi lắt léo!", "Bình tĩnh hít thở nào!"];
+
+    const TEACHER_PASSWORD = "admin";
+
+    function openAuthModal() {
+        document.getElementById('auth-modal').classList.remove('hidden');
+        document.getElementById('teacher-password').value = '';
+        document.getElementById('auth-error').classList.add('hidden');
+        setTimeout(() => { document.getElementById('teacher-password').focus(); }, 100);
+    }
+
+    function closeAuthModal() {
+        document.getElementById('auth-modal').classList.add('hidden');
+    }
+
+    function checkPassword() {
+        const input = document.getElementById('teacher-password').value;
+        if (input === TEACHER_PASSWORD) {
+            closeAuthModal();
+            openDataModal();
+        } else {
+            document.getElementById('auth-error').classList.remove('hidden');
+            document.getElementById('teacher-password').value = '';
+            document.getElementById('teacher-password').focus();
+        }
+    }
+
+    function safePlayAudio(id) {
+        try {
+            if(!isSoundOn) return;
+            const el = document.getElementById(id);
+            if (el && typeof el.play === 'function') {
+                el.currentTime = 0;
+                el.play().catch(e => {}); 
+            }
+        } catch (e) {}
+    }
+    
+    function safePauseAudio(id) {
+        try {
+            const el = document.getElementById(id);
+            if (el && typeof el.pause === 'function') { el.pause(); }
+        } catch (e) {}
+    }
+
+    function openDataModal() { document.getElementById('data-modal').classList.remove('hidden'); }
+    function closeDataModal() { document.getElementById('data-modal').classList.add('hidden'); }
+
+    function downloadTemplate() {
+        const ws_data = [
+            ["Cấp độ (1=Dễ, 2=Vừa, 3=Khó)", "Câu hỏi", "Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D", "Đáp án đúng (0=A, 1=B, 2=C, 3=D)", "Giải thích đáp án (Bắt buộc)"],
+            [1, "2 + 2 x 2 = ?", "6", "8", "4", "12", 0, "Theo quy tắc nhân chia trước, cộng trừ sau: 2 x 2 = 4, sau đó 2 + 4 = 6."]
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+        ws['!cols'] = [{wch: 15}, {wch: 40}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 50}];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Ngan_Hang_Cau_Hoi");
+        XLSX.writeFile(wb, "Mau_De_Thi_IQ.xlsx");
+        showToast("✅ Đã tải file Excel mẫu!");
+    }
+
+    function importExcel(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+
+                let newTier1 = []; let newTier2 = []; let newTier3 = [];
+
+                for(let i = 1; i < jsonData.length; i++) {
+                    let row = jsonData[i];
+                    if (!row || row.length < 7) continue; 
+                    
+                    let level = parseInt(row[0]);
+                    let qObj = {
+                        type: 'mcq',
+                        q: row[1] ? row[1].toString() : "",
+                        a: [
+                            row[2] ? row[2].toString() : "",
+                            row[3] ? row[3].toString() : "",
+                            row[4] ? row[4].toString() : "",
+                            row[5] ? row[5].toString() : ""
+                        ],
+                        c: parseInt(row[6]),
+                        exp: row[7] ? row[7].toString() : "Chưa có lời giải thích cho câu hỏi này."
+                    };
+
+                    if(level === 1) newTier1.push(qObj);
+                    else if(level === 2) newTier2.push(qObj);
+                    else if(level === 3) newTier3.push(qObj);
+                }
+
+                if(newTier1.length + newTier2.length + newTier3.length >= 5) {
+                    tier1.length = 0; tier1.push(...newTier1);
+                    tier2.length = 0; tier2.push(...newTier2);
+                    tier3.length = 0; tier3.push(...newTier3);
+                    updateDataStatus(`✅ Đã nạp từ Excel:<br>• Dễ: ${tier1.length} | Vừa: ${tier2.length} | Khó: ${tier3.length}`, 'emerald');
+                } else {
+                    throw new Error("Ít nhất cần 5 câu hỏi");
+                }
+            } catch(error) {
+                updateDataStatus(`❌ Lỗi file hoặc không đủ 5 câu hỏi!`, 'red');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function toggleAIForm() {
+        const form = document.getElementById('ai-form-container');
+        const icon = document.getElementById('ai-toggle-icon');
+        if (form.classList.contains('hidden')) {
+            form.classList.remove('hidden');
+            icon.style.transform = 'rotate(180deg)';
+        } else {
+            form.classList.add('hidden');
+            icon.style.transform = 'rotate(0deg)';
+        }
+    }
+
+    function updateDataStatus(message, colorClass) {
+        const status = document.getElementById('import-status');
+        status.innerHTML = message;
+        status.classList.remove('hidden');
+        status.className = `text-sm mt-4 font-bold text-${colorClass}-400 block px-4 py-3 rounded-xl bg-${colorClass}-900/30 border border-${colorClass}-500/50 text-center`;
+    }
+
+    async function generateAIQuestions() {
+        const subject = document.getElementById('ai-subject').value.trim();
+        const topic = document.getElementById('ai-topic').value.trim();
+        let count = parseInt(document.getElementById('ai-count').value);
+        const difficulty = parseInt(document.getElementById('ai-difficulty').value);
+
+        if (isNaN(count) || count < 3) count = 3;
+
+        if (!subject || !topic) {
+            updateDataStatus("⚠️ Vui lòng nhập Môn học và Nội dung!", "yellow");
+            return;
+        }
+
+        const btn = document.getElementById('btn-generate-ai');
+        const aiStatus = document.getElementById('ai-status');
+        
+        btn.disabled = true;
+        btn.innerHTML = `<span class="loader"></span> <span>ĐANG GỌI GIÁO SƯ...</span>`;
+        btn.classList.add('opacity-70', 'cursor-not-allowed');
+        aiStatus.classList.remove('hidden');
+        aiStatus.innerText = "Giáo sư Trí Tuệ đang biên soạn đề, vui lòng chờ...";
+        updateDataStatus("", "gray"); document.getElementById('import-status').classList.add('hidden');
+
+        let apiKey = ""; 
+        let endpoints = [];
+        if (!apiKey || apiKey === "") {
+            endpoints = [`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`];
+        } else {
+            endpoints = [
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+                `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`
+            ];
+        }
+
+        let difficultyText = difficulty === 1 ? "Dễ" : difficulty === 2 ? "Trung bình" : "Khó";
+
+        const promptText = `Tạo bộ câu hỏi trắc nghiệm. BẠN LÀ "GIÁO SƯ TRÍ TUỆ" - vui tính, thông thái.
+- Môn: ${subject}
+- Nội dung: ${topic}
+- Số câu: ${count}
+- Độ khó: ${difficultyText}
+
+Mỗi câu gồm: "type" (luôn là "mcq"), "q" (Câu hỏi), "a" (Mảng 4 đáp án), "c" (Vị trí đáp án đúng từ 0-3), "exp" (Giải thích ngắn 2 câu).
+TRẢ VỀ ĐÚNG MỘT MẢNG JSON. Ví dụ: [{"type":"mcq","q":"Hỏi?","a":["A","B","C","D"],"c":0,"exp":"Giải thích"}]`;
+
+        const payload = {
+            contents: [{ parts: [{ text: promptText }] }],
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+            ]
+        };
+
+        let rawText = null;
+        let lastErrorMsg = "Lỗi không xác định";
+
+        for (const endpointUrl of endpoints) {
+            try {
+                aiStatus.innerText = "Giáo sư Trí Tuệ đang tập trung suy nghĩ...";
+                const response = await fetch(endpointUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error?.message || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.candidates?.[0]?.finishReason === "SAFETY") {
+                    throw new Error("Nội dung bị chặn do bộ lọc an toàn của Google.");
+                }
+                
+                rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (rawText) break; 
+                
+            } catch (error) {
+                console.warn(`Thử máy chủ thất bại, đang đổi...`, error.message);
+                lastErrorMsg = error.message;
+            }
+        }
+
+        try {
+            if (!rawText) throw new Error(lastErrorMsg);
+
+            let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const firstBracket = cleanText.indexOf('[');
+            const lastBracket = cleanText.lastIndexOf(']');
+            if (firstBracket !== -1 && lastBracket !== -1) {
+                cleanText = cleanText.substring(firstBracket, lastBracket + 1);
+            }
+
+            const aiQuestions = JSON.parse(cleanText);
+            
+            if (!Array.isArray(aiQuestions) || aiQuestions.length === 0) throw new Error("Dữ liệu rỗng.");
+
+            aiQuestionsQueue.unshift(...aiQuestions);
+            updateDataStatus(`✅ Giáo sư đã tạo xong ${aiQuestions.length} câu hỏi đặc biệt!`, 'emerald');
+            document.getElementById('ai-topic').value = '';
+            
+        } catch (error) {
+            console.error("Lỗi trích xuất AI:", error);
+            let errMsg = error.message;
+            if(errMsg.includes("has not been used in project") || errMsg.includes("is disabled")) {
+                errMsg = "Sai API Key! Hãy vào aistudio.google.com tạo Key AI riêng.";
+            } else if(errMsg.includes("API_KEY_INVALID") || errMsg.includes("API key not valid")) {
+                errMsg = "Thiếu API Key hoặc API Key không hợp lệ.";
+            }
+            updateDataStatus(`❌ Lỗi kết nối AI: ${errMsg}`, 'red');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<span>🚀 GỌI GIÁO SƯ TRÍ TUỆ BẮT ĐẦU TẠO</span>`;
+            btn.classList.remove('opacity-70', 'cursor-not-allowed');
+            aiStatus.classList.add('hidden');
+        }
+    }
+
+    // --- LOGIC GAME & ANTI-CHEAT ---
+    
+    // Khôi phục phím tắt khi rời phòng thi
+    function removeAntiCheatShield() {
+        document.body.classList.remove('shield-active');
+    }
+    function enableAntiCheatShield() {
+        document.body.classList.add('shield-active');
+    }
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden && isGameRunning && !isPaused && lives > 0 && !isShowingExplanation) {
+            triggerAntiCheat("Phát hiện rời khỏi phòng thi!");
+        }
+    });
+
+    document.addEventListener("fullscreenchange", () => {
+        if (!document.fullscreenElement && isGameRunning && !isPaused && lives > 0 && !isShowingExplanation) {
+            triggerAntiCheat("Rời khỏi chế độ toàn màn hình!");
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        // KHÓA PHÍM GIAN LẬN
+        if (document.body.classList.contains('shield-active') && isGameRunning && !isPaused && lives > 0) {
+            if (e.altKey || e.key === 'Tab' || e.key === 'Escape' || e.key === 'Meta' || e.key === 'Control') {
+                e.preventDefault(); 
+                showToast("🚨 Bàn phím hệ thống đã bị khóa trong phòng thi!");
+                return; // Chặn xử lý tiếp
+            }
+        }
+
+        if(document.getElementById('game-screen').classList.contains('hidden')) return;
+        const key = e.key.toLowerCase();
+        
+        if (key === 'p') { togglePause(); return; }
+        if(isPaused) return;
+        
+        if (isShowingExplanation) {
+            if (key === 'enter' || key === ' ') nextQuestion();
+            return;
+        }
+
+        if (isClickable) {
+            let q = questions[currentIndex];
+            // Phím tắt A B C D chỉ hoạt động cho loại Trắc nghiệm (MCQ)
+            if (!q.type || q.type === 'mcq') {
+                const btns = document.querySelectorAll('.option-btn');
+                if(key === 'a' && btns[0] && !btns[0].disabled) checkAnswer(0, btns[0], {});
+                if(key === 'b' && btns[1] && !btns[1].disabled) checkAnswer(1, btns[1], {});
+                if(key === 'c' && btns[2] && !btns[2].disabled) checkAnswer(2, btns[2], {});
+                if(key === 'd' && btns[3] && !btns[3].disabled) checkAnswer(3, btns[3], {});
+            } else if (q.type === 'fill') {
+                if (key === 'enter') checkFillAnswer();
+            }
+
+            if(key === '1') use5050(); if(key === '2') useFreeze(); if(key === '3') useSwap();
+        }
+    });
+
+    function triggerAntiCheat(reason = "Gian lận!") {
+        let penaltyIQ = 30;
+        currentIQ = Math.max(baseIQ, currentIQ - penaltyIQ);
+        streak = 0; comboMultiplier = 1; fastCorrectStreak = 0;
+        updateComboUI(); updateStats();
+        loseHeart();
+        if(!isPaused) togglePause(true); 
+
+        showMsg(`🚨 CẢNH BÁO: ${reason}`, "text-red-500 font-black text-xl sm:text-2xl drop-shadow-[0_0_15px_rgba(239,68,68,1)]");
+        
+        let rect = document.getElementById('question-container').getBoundingClientRect();
+        showFloatingText(`-${penaltyIQ} IQ`, {clientX: rect.left + rect.width/2, clientY: rect.top + rect.height/2}, true);
+    }
+
+    function togglePause(forcePause = false) {
+        if(!isGameRunning || lives <= 0) return;
+        if(isShowingExplanation && !forcePause) return;
+
+        const overlay = document.getElementById('pause-overlay');
+        
+        if(forcePause === true) isPaused = true;
+        else isPaused = !isPaused;
+
+        if(isPaused) {
+            clearInterval(timerInterval);
+            clearTimeout(freezeTimeout);
+            overlay.classList.remove('hidden'); overlay.classList.add('flex');
+            document.getElementById('btn-pause').innerText = "▶️";
+            safePauseAudio('bgm-normal'); safePauseAudio('bgm-tense');
+        } else {
+            overlay.classList.add('hidden'); overlay.classList.remove('flex');
+            document.getElementById('btn-pause').innerText = "⏸️";
+            
+            if(isSoundOn) {
+                if (isBossLevel) safePlayAudio('bgm-tense');
+                else safePlayAudio('bgm-normal');
+            }
+
+            if(!isShowingExplanation && !document.getElementById('time-bar').classList.contains('frozen-bar')) {
+                runTimer();
+            }
+        }
+    }
+
+    function resetToHome() {
+        document.getElementById('result-screen').classList.add('hidden');
+        document.getElementById('leaderboard-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.add('hidden');
+        document.getElementById('btn-pause').classList.add('hidden');
+        
+        const intro = document.getElementById('intro-screen');
+        intro.classList.remove('hidden');
+        intro.classList.add('animate-pop');
+        
+        document.getElementById('player-name').value = ''; 
+        currentRunId = null; isGameRunning = false;
+        removeAntiCheatShield(); // Gỡ lá chắn bàn phím
+        
+        let bestIQ = localStorage.getItem('iqBestScore_v2');
+        if(bestIQ && parseInt(bestIQ) > 100) {
+            document.getElementById('best-iq-display').classList.remove('hidden');
+            document.getElementById('best-iq-value').innerText = bestIQ;
+        }
+        
+        safePauseAudio('bgm-normal'); safePauseAudio('bgm-tense');
+    }
+
+    window.onload = resetToHome;
+
+    function shuffle(array) {
+        let copy = [...array];
+        for (let i = copy.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+    }
+
+    function toggleSound() {
+        isSoundOn = !isSoundOn;
+        document.getElementById('sound-toggle').innerText = isSoundOn ? "🔊" : "🔇";
+        
+        let audios = [document.getElementById('bgm-normal'), document.getElementById('bgm-tense'), document.getElementById('sfx-correct'), document.getElementById('sfx-wrong'), document.getElementById('sfx-powerup')];
+        audios.forEach(a => { if (a) a.muted = !isSoundOn; });
+
+        if (isSoundOn) {
+            if (!document.getElementById('game-screen').classList.contains('hidden') && !isPaused) {
+                if (isBossLevel) safePlayAudio('bgm-tense');
+                else safePlayAudio('bgm-normal');
+            } else if (!isGameRunning) {
+                let bgm = document.getElementById('bgm-normal');
+                if(bgm) { bgm.volume = 0.3; safePlayAudio('bgm-normal'); }
+            }
+        } else {
+            safePauseAudio('bgm-normal'); safePauseAudio('bgm-tense');
+        }
+    }
+
+    function updateLivesUI() {
+        try {
+            for(let i=1; i<=3; i++) {
+                let heart = document.getElementById(`heart-${i}`);
+                if(!heart) continue;
+                if(i <= lives) {
+                    heart.classList.remove('heart-lost');
+                    heart.style.opacity = '1';
+                    heart.style.filter = 'grayscale(0%)';
+                } else {
+                    if(!heart.classList.contains('heart-lost')) heart.classList.add('heart-lost');
+                }
+            }
+        } catch(e){}
+    }
+
+    function loseHeart() {
+        lives--;
+        updateLivesUI();
+        if(lives <= 0) {
+            setTimeout(() => { showResult(true); }, 1000);
+        }
+    }
+
+    function startGame() {
+        if (tier1.length + tier2.length + tier3.length < 5) {
+            alert("Ngân hàng câu hỏi quá ít! Vui lòng nạp thêm.");
+            return;
+        }
+
+        try {
+            let elem = document.documentElement;
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                let req = elem.requestFullscreen ? elem.requestFullscreen() : (elem.webkitRequestFullscreen ? elem.webkitRequestFullscreen() : null);
+                if (req) req.catch(e => {}); 
+                document.getElementById('fullscreen-toggle').innerText = "🗗";
+            }
+        } catch (error) {}
+
+        document.getElementById('intro-screen').classList.add('hidden');
+        document.getElementById('data-modal').classList.add('hidden'); 
+        
+        const gameScreen = document.getElementById('game-screen');
+        gameScreen.classList.remove('hidden'); gameScreen.classList.add('flex');
+        document.getElementById('btn-pause').classList.remove('hidden');
+        
+        isGameRunning = true; isPaused = false;
+        enableAntiCheatShield(); // Kích hoạt chặn phím
+        
+        document.getElementById('pause-overlay').classList.add('hidden');
+        document.getElementById('pause-overlay').classList.remove('flex');
+        document.getElementById('btn-pause').innerText = "⏸️";
+
+        lives = 3; updateLivesUI();
+        used5050 = false; usedFreeze = false; usedSwap = false;
+        document.getElementById('btn-5050').classList.remove('disabled-powerup');
+        document.getElementById('btn-freeze').classList.remove('disabled-powerup');
+        document.getElementById('btn-swap').classList.remove('disabled-powerup');
+        document.body.classList.remove('boss-mode');
+        document.getElementById('question-container').classList.remove('boss-container');
+        document.getElementById('explanation-container').classList.remove('active');
+        document.getElementById('combo-multiplier').classList.add('hidden');
+        
+        fastCorrectStreak = 0; maxFastCorrectStreak = 0;
+        achievedClutch = false; currentRunId = null; comboMultiplier = 1;
+
+        let bgmNormal = document.getElementById('bgm-normal');
+        let bgmTense = document.getElementById('bgm-tense');
+        if(bgmNormal) bgmNormal.volume = 0.3; 
+        if(bgmTense) { bgmTense.volume = 0.5; bgmTense.currentTime = 0; }
+        
+        if (isSoundOn) safePlayAudio('bgm-normal');
+        safePauseAudio('bgm-tense');
+
+        let t1 = shuffle(tier1).slice(0, 8); 
+        let t2 = shuffle(tier2).slice(0, 9); 
+        let t3 = shuffle(tier3).slice(0, 3); 
+        
+        reserveQuestions = [...tier1, ...tier2, ...tier3].filter(q => !t1.includes(q) && !t2.includes(q) && !t3.includes(q));
+        reserveQuestions = shuffle(reserveQuestions);
+
+        questions = [...aiQuestionsQueue, ...t1, ...t2, ...t3];
+        document.getElementById('total-q-num').innerText = questions.length;
+
+        currentIndex = 0; currentIQ = baseIQ; streak = 0;
+        updateStats(); loadQuestion();
+    }
+
+    function use5050() {
+        if(used5050 || !isClickable || isBossLevel || isPaused) return;
+        if(questions[currentIndex].type && questions[currentIndex].type !== 'mcq') {
+            showToast("⚠️ Trợ giúp 50:50 chỉ dành cho Trắc nghiệm 4 đáp án!");
+            return;
+        }
+
+        used5050 = true; safePlayAudio('sfx-powerup');
+        document.getElementById('btn-5050').classList.add('disabled-powerup');
+        
+        const buttons = document.querySelectorAll('.option-btn');
+        let wrongIndexes = [];
+        for(let i=0; i<4; i++) { if(i !== currentCorrectIndex) wrongIndexes.push(i); }
+        wrongIndexes = shuffle(wrongIndexes).slice(0,2);
+        
+        wrongIndexes.forEach(i => {
+            if(buttons[i]) {
+                buttons[i].style.opacity = '0.15';
+                buttons[i].style.transform = 'scale(0.95)';
+                buttons[i].disabled = true;
+            }
+        });
+        showMsg("🪄 Giáo sư loại hộ 2 đáp án sai!", "text-purple-400");
+    }
+
+    function useFreeze() {
+        if(usedFreeze || !isClickable || isBossLevel || isPaused) return;
+        usedFreeze = true; safePlayAudio('sfx-powerup');
+        document.getElementById('btn-freeze').classList.add('disabled-powerup');
+        
+        clearInterval(timerInterval);
+        document.getElementById('time-bar').classList.add('frozen-bar');
+        showMsg("❄️ Thời gian ngưng đọng (5s)!", "text-blue-400");
+
+        freezeTimeout = setTimeout(() => {
+            if(isClickable && !isPaused) {
+                document.getElementById('time-bar').classList.remove('frozen-bar');
+                runTimer();
+                showMsg("⚠️ Hết thời gian đóng băng!", "text-red-400");
+            }
+        }, 5000);
+    }
+
+    function useSwap() {
+        if(usedSwap || !isClickable || isBossLevel || isPaused) return;
+        if(reserveQuestions.length === 0) return showToast("❌ Không còn câu hỏi dự phòng!");
+        
+        usedSwap = true; safePlayAudio('sfx-powerup');
+        document.getElementById('btn-swap').classList.add('disabled-powerup');
+        
+        clearInterval(timerInterval); clearTimeout(freezeTimeout);
+        questions[currentIndex] = reserveQuestions.pop();
+        
+        showMsg("🔄 Đã đổi sang câu hỏi mới!", "text-emerald-400");
+        document.getElementById('game-screen').classList.add('animate-shake');
+        setTimeout(() => {
+            document.getElementById('game-screen').classList.remove('animate-shake');
+            loadQuestion(); 
+        }, 400);
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval); clearTimeout(freezeTimeout);
+        isBossLevel = (currentIndex === questions.length - 1);
+        currentTotalTime = isBossLevel ? 20000 : 15000; // Tăng thêm thời gian cho dễ thao tác nhập/kéo thả
+        timeLeft = currentTotalTime;
+        
+        const timeBar = document.getElementById('time-bar');
+        timeBar.classList.remove('frozen-bar');
+        timeBar.style.backgroundColor = "#34d399";
+        timeBar.style.width = "100%";
+        
+        if(!isPaused) runTimer();
+    }
+
+    function runTimer() {
+        timerInterval = setInterval(() => {
+            if(isPaused) return;
+            timeLeft -= 50; updateTimeBar();
+            if(timeLeft <= 0) {
+                clearInterval(timerInterval);
+                document.getElementById('time-bar').style.width = "0%";
+                handleTimeOut();
+            }
+        }, 50);
+    }
+
+    function updateTimeBar() {
+        let percent = (timeLeft / currentTotalTime) * 100;
+        const timeBar = document.getElementById('time-bar');
+        timeBar.style.width = `${percent}%`;
+
+        if(!timeBar.classList.contains('frozen-bar')) {
+            if(percent <= 50 && percent > 25) timeBar.style.backgroundColor = "#f59e0b";
+            else if (percent <= 25) {
+                timeBar.style.backgroundColor = "#ef4444";
+                const qContainer = document.getElementById('question-container');
+                if(!qContainer.classList.contains('danger-mode') && !isBossLevel) qContainer.classList.add('danger-mode');
+            }
+        }
+    }
+
+    function loadQuestion() {
+        try {
+            isShowingExplanation = false;
+            document.getElementById('explanation-container').classList.remove('active');
+            const optionsGrid = document.getElementById('options-grid');
+            optionsGrid.style.display = "grid"; 
+
+            const qContainer = document.getElementById('question-container');
+            qContainer.classList.remove('animate-pop', 'danger-mode');
+            void qContainer.offsetWidth; 
+            qContainer.classList.add('animate-pop');
+
+            isBossLevel = (currentIndex >= questions.length - 3);
+
+            if (isBossLevel) {
+                document.body.classList.add('boss-mode');
+                qContainer.classList.add('boss-container');
+                document.getElementById('btn-5050').classList.add('disabled-powerup');
+                document.getElementById('btn-freeze').classList.add('disabled-powerup');
+                document.getElementById('btn-swap').classList.add('disabled-powerup');
+                
+                safePauseAudio('bgm-normal');
+                if (isSoundOn && !isPaused) safePlayAudio('bgm-tense');
+            }
+
+            const q = questions[currentIndex];
+            if(!q) return; 
+            
+            document.getElementById('current-q-num').innerText = currentIndex + 1;
+            document.getElementById('question-text').innerText = q.q;
+
+            const tierBadge = document.getElementById('tier-badge');
+
+            if (isBossLevel) {
+                tierBadge.innerText = "BOSS: GIỚI HẠN IQ"; 
+                tierBadge.className = "text-xs sm:text-sm font-black text-white bg-red-600 px-4 py-1.5 rounded-full animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.8)]";
+                showMsg("⚠️ ĐÚNG +50 IQ | SAI MẤT 1 ❤️ ⚠️", "text-red-500 text-lg sm:text-2xl font-black drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]");
+            } else if (currentIndex < aiQuestionsQueue.length) {
+                tierBadge.innerText = "✨ AI Tạo"; 
+                tierBadge.className = "text-xs sm:text-sm font-black text-purple-400 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30";
+                document.getElementById('psych-msg').classList.replace('opacity-100', 'opacity-0');
+            } else {
+                let defaultIndex = currentIndex - aiQuestionsQueue.length;
+                let defaultTotal = questions.length - aiQuestionsQueue.length;
+                let ratio = defaultTotal > 0 ? defaultIndex / defaultTotal : 0;
+
+                if (ratio < 0.4) {
+                    tierBadge.innerText = "Khởi Động"; tierBadge.className = "text-xs sm:text-sm font-black text-emerald-400 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30";
+                } else {
+                    tierBadge.innerText = "Tăng Tốc"; tierBadge.className = "text-xs sm:text-sm font-black text-yellow-400 px-3 py-1.5 rounded-full bg-yellow-500/10 border border-yellow-500/30";
+                }
+                document.getElementById('psych-msg').classList.replace('opacity-100', 'opacity-0');
+            }
+
+            optionsGrid.innerHTML = "";
+            
+            // Render giao diện theo từng loại (Type) của câu hỏi
+            if (!q.type || q.type === 'mcq') {
+                let optionsArr = q.a.map((text, i) => { return {text: text, originalId: i}; });
+                let shuffledOptions = shuffle(optionsArr);
+                currentCorrectIndex = shuffledOptions.findIndex(o => o.originalId === q.c);
+
+                shuffledOptions.forEach((opt, index) => {
+                    const btn = document.createElement('button');
+                    const letter = String.fromCharCode(65 + index);
+                    btn.className = "option-btn bg-black/40 border border-white/10 hover:border-white/30 text-white font-semibold py-3 px-4 sm:py-5 sm:px-6 rounded-2xl text-left w-full text-base sm:text-xl shadow-lg flex items-center group";
+                    btn.innerHTML = `
+                        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/10 group-hover:bg-white/20 flex items-center justify-center mr-3 sm:mr-4 font-black transition-colors shrink-0">
+                            ${letter}
+                        </div> 
+                        <span class="flex-1">${opt.text}</span>
+                    `;
+                    btn.onclick = (e) => checkAnswer(index, btn, e);
+                    optionsGrid.appendChild(btn);
+                });
+            } 
+            else if (q.type === 'fill') {
+                optionsGrid.innerHTML = `
+                    <div class="col-span-1 md:col-span-2 flex flex-col items-center gap-4 w-full">
+                        <input type="text" id="fill-input" class="w-full max-w-md px-6 py-4 rounded-2xl bg-black/50 border border-white/30 text-emerald-400 font-bold text-2xl text-center focus:border-emerald-500 focus:outline-none transition-all" placeholder="Nhập đáp án của bạn..." autocomplete="off">
+                        <button onclick="checkFillAnswer()" class="w-full max-w-md py-4 rounded-xl text-lg font-black bg-gradient-to-r from-blue-600 to-cyan-600 shadow-[0_5px_20px_rgba(37,99,235,0.4)] text-white hover:scale-[1.02] transition-transform">XÁC NHẬN TRẢ LỜI</button>
+                    </div>
+                `;
+                setTimeout(() => { document.getElementById('fill-input').focus(); }, 300);
+            }
+            else if (q.type === 'drag') {
+                let shuffledPieces = shuffle([...q.c]); // q.c is array of ordered strings
+                
+                let dropHTML = q.c.map((_, i) => `<div id="drop-${i}" class="drop-zone w-full sm:flex-1 h-14 bg-white/10 rounded-xl flex items-center justify-center font-bold text-sm border border-dashed border-gray-400 cursor-pointer transition-all" onclick="moveDragItem(this, 'bank')"></div>`).join('');
+                
+                let bankHTML = shuffledPieces.map((piece, i) => `<div id="piece-${i}" class="drag-piece px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl font-bold text-sm shadow-md cursor-pointer transition-all hover:scale-105 text-center" onclick="moveDragItem(this, 'drop')">${piece}</div>`).join('');
+
+                optionsGrid.innerHTML = `
+                    <div class="col-span-1 md:col-span-2 flex flex-col items-center gap-6 w-full">
+                        <p class="text-sm text-yellow-300 italic mb-[-10px] w-full text-center">* Chạm vào mảnh ghép để sắp xếp lên các ô trống.</p>
+                        <div id="drag-drop-container" class="flex flex-col sm:flex-row w-full gap-2 justify-between min-h-[50px] p-2 bg-black/40 rounded-2xl">
+                            ${dropHTML}
+                        </div>
+                        <div id="drag-bank-container" class="flex flex-wrap w-full gap-3 justify-center min-h-[50px] p-4 bg-black/30 rounded-2xl border border-white/10">
+                            ${bankHTML}
+                        </div>
+                        <button onclick="checkDragAnswer()" class="w-full max-w-md py-4 rounded-xl text-lg font-black bg-gradient-to-r from-emerald-600 to-teal-600 shadow-[0_5px_20px_rgba(16,185,129,0.4)] text-white hover:scale-[1.02] transition-transform">XÁC NHẬN GHÉP NỐI</button>
+                    </div>
+                `;
+            }
+            
+            isClickable = true; startTimer();
+        } catch(e) { console.error("Lỗi nạp câu hỏi:", e); }
+    }
+
+    // Xử lý chung các loại đáp án
+    function processAnswerCommon(isCorrect, targetElement, event = {}) {
+        isClickable = false;
+        clearInterval(timerInterval); clearTimeout(freezeTimeout);
+        document.getElementById('question-container').classList.remove('danger-mode');
+
+        let timeUsed = currentTotalTime - timeLeft;
+
+        if(isCorrect) {
+            streak++;
+            if(streak >= 6) comboMultiplier = 3;
+            else if(streak >= 3) comboMultiplier = 2;
+            else comboMultiplier = 1;
+        } else {
+            streak = 0; comboMultiplier = 1;
+        }
+
+        updateComboUI();
+
+        if(isCorrect) {
+            if(targetElement) targetElement.classList.add('correct-ans');
+            safePlayAudio('sfx-correct');
+            if(comboMultiplier >= 2) fireMiniConfetti();
+
+            fastCorrectStreak = (timeUsed < 3000) ? fastCorrectStreak + 1 : 0;
+            if(fastCorrectStreak > maxFastCorrectStreak) maxFastCorrectStreak = fastCorrectStreak;
+            if(timeLeft < 2000 && currentTotalTime >= 10000) achievedClutch = true;
+            
+            let baseAdd = isBossLevel ? 50 : 5 + Math.ceil((timeLeft / currentTotalTime) * 5);
+            let totalAdded = baseAdd * comboMultiplier;
+            currentIQ += totalAdded;
+            
+            let praise = (timeLeft / currentTotalTime) > 0.7 ? praiseWords[0] : praiseWords[Math.floor(Math.random() * praiseWords.length)];
+            if(isBossLevel) praise = "🔥 XUẤT SẮC ĐÁNH BẠI TRÙM CUỐI!";
+            showMsg(praise, "text-emerald-400");
+            
+            let floatText = `+${totalAdded} IQ`;
+            if(comboMultiplier > 1) floatText += ` (x${comboMultiplier})`;
+            showFloatingText(floatText, event || {}, false);
+
+            showExplanation(true, targetElement);
+        } else {
+            if(targetElement) targetElement.classList.add('wrong-ans');
+            
+            // Khắc phục: Hiện đáp án đúng cho MCQ
+            if (!questions[currentIndex].type || questions[currentIndex].type === 'mcq') {
+                const buttons = document.querySelectorAll('.option-btn');
+                if(buttons[currentCorrectIndex]) buttons[currentCorrectIndex].classList.add('correct-ans');
+            }
+
+            safePlayAudio('sfx-wrong');
+            document.getElementById('game-screen').classList.add('animate-shake');
+
+            let penalty = isBossLevel ? 50 : 10;
+            currentIQ = Math.max(baseIQ, currentIQ - penalty);
+            fastCorrectStreak = 0;
+
+            let cMsg = isBossLevel ? "CÚ SẢY CHÂN CHÍ MẠNG!" : comfortWords[Math.floor(Math.random() * comfortWords.length)];
+            showMsg(cMsg, "text-red-400");
+            showFloatingText(`-${penalty} IQ`, event || {}, true);
+
+            loseHeart(); 
+            if(lives > 0) showExplanation(false, targetElement);
+        }
+        updateStats();
+    }
+
+    // Handler cho Trắc nghiệm (MCQ)
+    function checkAnswer(selectedIndex, btnElement, event) {
+        if(!isClickable || isPaused) return;
+        const isCorrect = (selectedIndex === currentCorrectIndex);
+        processAnswerCommon(isCorrect, btnElement, event);
+    }
+
+    // Handler cho Điền khuyết (Fill)
+    window.checkFillAnswer = function(event = {}) {
+        if(!isClickable || isPaused) return;
+        const inputEl = document.getElementById('fill-input');
+        const inputVal = inputEl.value.trim().toLowerCase();
+        const correctVal = questions[currentIndex].c.trim().toLowerCase();
+        const isCorrect = (inputVal === correctVal);
+        
+        inputEl.disabled = true;
+        if(isCorrect) {
+            inputEl.classList.add('bg-emerald-500/30', 'border-emerald-500', 'text-emerald-400');
+        } else {
+            inputEl.classList.add('bg-red-500/30', 'border-red-500', 'text-red-400');
+            inputEl.value = `${inputEl.value} (Đúng: ${questions[currentIndex].c})`;
+        }
+
+        processAnswerCommon(isCorrect, inputEl, event);
+    }
+
+    // Handler Di chuyển Kéo thả
+    window.moveDragItem = function(element, target) {
+        if(!isClickable || isPaused) return;
+        safePlayAudio('sfx-powerup'); 
+        if (target === 'drop') {
+            const dropZones = document.querySelectorAll('.drop-zone');
+            for (let zone of dropZones) {
+                if (zone.children.length === 0) {
+                    zone.appendChild(element);
+                    element.setAttribute('onclick', "moveDragItem(this, 'bank')");
+                    break;
+                }
+            }
+        } else {
+            const bank = document.getElementById('drag-bank-container');
+            bank.appendChild(element);
+            element.setAttribute('onclick', "moveDragItem(this, 'drop')");
+        }
+    }
+
+    // Handler Nộp bài Kéo thả (Drag)
+    window.checkDragAnswer = function(event = {}) {
+        if(!isClickable || isPaused) return;
+        const dropZones = document.querySelectorAll('.drop-zone');
+        let currentAnswer = [];
+        let allFilled = true;
+        dropZones.forEach(zone => {
+            if (zone.children.length > 0) {
+                currentAnswer.push(zone.children[0].innerText.trim());
+            } else {
+                allFilled = false;
+            }
+        });
+
+        if (!allFilled) {
+            showMsg("⚠️ Bạn phải điền kín tất cả các ô!", "text-yellow-400");
+            return;
+        }
+
+        const correctArr = questions[currentIndex].c;
+        let isCorrect = true;
+        for(let i=0; i<correctArr.length; i++){
+            if(currentAnswer[i] !== correctArr[i]) {
+                isCorrect = false;
+                break;
+            }
+        }
+
+        const container = document.getElementById('drag-drop-container');
+        if(isCorrect) {
+            container.classList.add('ring-2', 'ring-emerald-500', 'shadow-[0_0_15px_rgba(16,185,129,0.5)]');
+        } else {
+            container.classList.add('ring-2', 'ring-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.5)]');
+        }
+
+        processAnswerCommon(isCorrect, container, event);
+    }
+
+
+    function handleTimeOut() {
+        try {
+            if(!isClickable || isPaused) return;
+            isClickable = false;
+            document.getElementById('question-container').classList.remove('danger-mode');
+
+            safePlayAudio('sfx-wrong');
+            document.getElementById('game-screen').classList.add('animate-shake');
+
+            // Hiển thị đáp án đúng nếu là MCQ
+            if (!questions[currentIndex].type || questions[currentIndex].type === 'mcq') {
+                const buttons = document.querySelectorAll('.option-btn');
+                if(buttons[currentCorrectIndex]) buttons[currentCorrectIndex].classList.add('correct-ans');
+            }
+
+            let penalty = isBossLevel ? 50 : 10;
+            currentIQ = Math.max(baseIQ, currentIQ - penalty);
+            streak = 0; comboMultiplier = 1; updateComboUI();
+            fastCorrectStreak = 0;
+
+            showMsg("⌛ HẾT GIỜ! Quá chậm chạp!", "text-red-500 font-black");
+            
+            let rect = document.getElementById('question-container').getBoundingClientRect();
+            showFloatingText(`-${penalty} IQ`, {clientX: rect.left + rect.width/2, clientY: rect.top + rect.height/2}, true);
+
+            loseHeart(); 
+            if(lives > 0) showExplanation(false, null);
+            
+            updateStats();
+        } catch(e) { console.error("Lỗi TimeOut:", e); }
+    }
+
+    function showExplanation(isCorrect, targetElement) {
+        try {
+            isShowingExplanation = true;
+            const expContainer = document.getElementById('explanation-container');
+            const expText = document.getElementById('explanation-text');
+            const expIcon = document.getElementById('exp-icon');
+            const expIndicator = document.getElementById('exp-indicator');
+            const currentQ = questions[currentIndex];
+
+            // Ẩn các đáp án sai của MCQ cho gọn
+            if (!currentQ.type || currentQ.type === 'mcq') {
+                const buttons = document.querySelectorAll('.option-btn');
+                buttons.forEach(btn => {
+                    if(!btn.classList.contains('correct-ans') && !btn.classList.contains('wrong-ans')) {
+                        btn.style.display = 'none';
+                    }
+                });
+            }
+
+            let expContent = (currentQ && currentQ.exp) ? currentQ.exp : "Đã có lỗi hiển thị đáp án";
+            expText.innerHTML = `"${expContent}"`;
+
+            if(isCorrect) {
+                expIcon.innerText = "👨‍🏫";
+                expIndicator.className = "absolute top-0 left-0 w-1.5 h-full bg-emerald-500 shadow-[0_0_10px_#10b981]";
+                expContainer.classList.replace('bg-black/60', 'bg-emerald-900/30');
+                expContainer.style.borderColor = "rgba(16, 185, 129, 0.3)";
+            } else {
+                expIcon.innerText = "🤦‍♂️";
+                expIndicator.className = "absolute top-0 left-0 w-1.5 h-full bg-orange-500 shadow-[0_0_10px_#f97316]";
+                expContainer.classList.replace('bg-emerald-900/30', 'bg-black/60');
+                expContainer.style.borderColor = "rgba(249, 115, 22, 0.3)";
+            }
+
+            setTimeout(() => {
+                expContainer.classList.add('active');
+                try { expContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch(e) {}
+            }, 600); 
+        } catch(e) { console.error("Lỗi Explanation:", e); }
+    }
+
+    function updateComboUI() {
+        const comboBadge = document.getElementById('combo-multiplier');
+        if(comboMultiplier > 1) {
+            comboBadge.innerText = `🔥 COMBO x${comboMultiplier}`;
+            comboBadge.classList.remove('hidden');
+            comboBadge.style.animation = 'none';
+            comboBadge.offsetHeight; 
+            comboBadge.style.animation = null; 
+        } else {
+            comboBadge.classList.add('hidden');
+        }
+    }
+
+    function showFloatingText(text, event, isNegative = false) {
+        try {
+            const floatEl = document.createElement('div');
+            floatEl.className = 'time-bonus-pop';
+            if(isNegative) {
+                floatEl.style.color = "#ef4444";
+                floatEl.style.textShadow = "0 4px 15px rgba(239, 68, 68, 0.5)";
+            } else {
+                floatEl.style.color = "#34d399";
+                floatEl.style.textShadow = "0 4px 15px rgba(16, 185, 129, 0.5)";
+            }
+            floatEl.innerText = text;
+            
+            let x = (event && event.clientX) ? event.clientX : window.innerWidth / 2; 
+            let y = (event && event.clientY) ? event.clientY : window.innerHeight / 2;
+
+            floatEl.style.left = (x - 30) + 'px';
+            floatEl.style.top = y + 'px';
+            
+            document.body.appendChild(floatEl);
+            setTimeout(() => { floatEl.remove(); }, 1200);
+        } catch(e){}
+    }
+
+    function nextQuestion() {
+        if(!isShowingExplanation) return; 
+        currentIndex++;
+        if(currentIndex >= questions.length) showResult();
+        else loadQuestion();
+    }
+
+    function updateStats() {
+        try {
+            const iqSpan = document.getElementById('iq-score');
+            let startVal = parseInt(iqSpan.innerText);
+            if (isNaN(startVal)) startVal = 100;
+            let endVal = currentIQ;
+            
+            if(startVal !== endVal) {
+                let dur = 500; let stepTime = 20;
+                let steps = dur / stepTime;
+                let diff = endVal - startVal;
+                let current = startVal;
+                
+                let counter = setInterval(() => {
+                    current += diff / steps;
+                    iqSpan.innerText = Math.round(current);
+                    if ((diff > 0 && current >= endVal) || (diff < 0 && current <= endVal)) {
+                        clearInterval(counter);
+                        iqSpan.innerText = endVal;
+                    }
+                }, stepTime);
+                
+                iqSpan.style.transform = "scale(1.4)";
+                iqSpan.style.color = diff > 0 ? "#34d399" : "#ef4444";
+                setTimeout(() => {
+                    iqSpan.style.transform = "scale(1)";
+                    iqSpan.style.color = "white";
+                }, 300);
+            } else {
+                iqSpan.innerText = currentIQ;
+            }
+            document.getElementById('streak-count').innerText = streak;
+        } catch(e){}
+    }
+
+    function showMsg(text, colorClass) {
+        const msg = document.getElementById('psych-msg');
+        if(!msg) return;
+        msg.className = `text-center h-6 sm:h-8 font-black text-base sm:text-xl transition-opacity duration-300 drop-shadow-md ${colorClass}`;
+        msg.innerText = text;
+        msg.classList.remove('opacity-0');
+        msg.classList.add('opacity-100');
+    }
+
+    // --- KẾT QUẢ & LƯU TRỮ ---
+    function showResult(isGameOverEarly = false) {
+        try {
+            isGameRunning = false;
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('flex');
+            document.getElementById('btn-pause').classList.add('hidden');
+            document.body.classList.remove('boss-mode'); 
+            removeAntiCheatShield(); // Gỡ lá chắn bảo mật
+            
+            const resultScreen = document.getElementById('result-screen');
+            resultScreen.classList.remove('hidden');
+            resultScreen.classList.add('animate-pop');
+
+            try {
+                let btnFullscreen = document.getElementById('fullscreen-toggle');
+                if(document.fullscreenElement || document.webkitFullscreenElement) {
+                     btnFullscreen.innerText = "⛶";
+                     let req = document.exitFullscreen ? document.exitFullscreen() : (document.webkitExitFullscreen ? document.webkitExitFullscreen() : null);
+                     if(req) req.catch(e=>{});
+                }
+            } catch(e) {}
+
+            safePauseAudio('bgm-normal'); safePauseAudio('bgm-tense');
+            document.getElementById('final-iq').innerText = currentIQ;
+
+            if(isGameOverEarly) {
+                document.getElementById('result-main-title').innerText = "💀 HẾT SINH MỆNH - BỊ LOẠI SỚM";
+                document.getElementById('result-main-title').classList.replace('text-gray-400', 'text-red-500');
+            } else {
+                document.getElementById('result-main-title').innerText = "Đánh Giá Phân Tích Não Bộ";
+                document.getElementById('result-main-title').classList.replace('text-red-500', 'text-gray-400');
+            }
+
+            let bestIQ = localStorage.getItem('iqBestScore_v2');
+            if (!bestIQ || currentIQ > parseInt(bestIQ)) {
+                localStorage.setItem('iqBestScore_v2', currentIQ);
+                document.getElementById('new-record-badge').classList.remove('hidden');
+                setTimeout(() => { safePlayAudio('sfx-powerup'); }, 500);
+            } else {
+                document.getElementById('new-record-badge').classList.add('hidden');
+            }
+
+            let rank = ""; let desc = ""; let confetiColors = [];
+            if(isGameOverEarly) {
+                rank = "THỬ THÁCH THẤT BẠI"; desc = "Giáo sư rất tiếc... Hãy trau dồi lại kiến thức và giữ vững Sinh mệnh lần sau nhé!";
+                confetiColors = ['#ef4444', '#991b1b']; fireConfetti(confetiColors, 20);
+                document.getElementById('final-rank').className = "text-3xl sm:text-5xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-red-500 to-red-800 leading-tight";
+            } else if (currentIQ >= 220) {
+                rank = "BỘ NÃO VŨ TRỤ"; desc = "Giáo sư tự hào về trò! Tư duy logic tuyệt đỉnh, tốc độ phản xạ như tia chớp.";
+                confetiColors = ['#fbbf24', '#f59e0b', '#d97706']; fireConfetti(confetiColors, 250);
+            } else if (currentIQ >= 160) {
+                rank = "THIÊN TÀI LOGIC"; desc = "Sự kết hợp hoàn hảo giữa kiến thức và khả năng suy luận sắc bén.";
+                confetiColors = ['#60a5fa', '#3b82f6', '#2563eb']; fireConfetti(confetiColors, 150);
+            } else if (currentIQ >= 120) {
+                rank = "HỌC BÁ TÀI NĂNG"; desc = "Nền tảng kiến thức rất tốt. Chỉ cần rèn luyện thêm sự bình tĩnh.";
+                confetiColors = ['#34d399', '#10b981']; fireConfetti(confetiColors, 80);
+            } else {
+                rank = "TIỀM NĂNG ẨN GIẤU"; desc = "Các câu hỏi khá khó phải không? Hãy ghi nhớ lời Giáo sư giải thích nhé!";
+                confetiColors = ['#9ca3af', '#6b7280']; fireConfetti(confetiColors, 40);
+            }
+
+            if(!isGameOverEarly) document.getElementById('final-rank').className = "text-3xl sm:text-5xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 via-yellow-500 to-orange-500 leading-tight";
+            
+            document.getElementById('final-rank').innerText = rank;
+            document.getElementById('final-msg').innerText = desc;
+
+            const achBox = document.getElementById('achievements-box');
+            achBox.innerHTML = ""; let hasAch = false;
+
+            if (maxFastCorrectStreak >= 3) {
+                achBox.innerHTML += `<div class="bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm">⚡ Siêu Tốc Độ</div>`; hasAch = true;
+            }
+            if (comboMultiplier >= 3) {
+                achBox.innerHTML += `<div class="bg-orange-500/20 border border-orange-500/50 text-orange-300 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm">🔥 Bậc Thầy Chuỗi</div>`; hasAch = true;
+            }
+            if (!used5050 && !usedFreeze && !usedSwap && !isGameOverEarly) {
+                achBox.innerHTML += `<div class="bg-purple-500/20 border border-purple-500/50 text-purple-300 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm">🗿 Bộ Não Thép (No Help)</div>`; hasAch = true;
+            }
+            if (lives === 3 && !isGameOverEarly) {
+                achBox.innerHTML += `<div class="bg-red-500/20 border border-red-500/50 text-red-300 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm">❤️ Bất Tử</div>`; hasAch = true;
+            }
+
+            if(hasAch) achBox.classList.remove('hidden'); else achBox.classList.add('hidden');
+        } catch (e) { console.error("Lỗi ShowResult:", e); }
+    }
+
+    function shareResult() {
+        let rankText = document.getElementById('final-rank').innerText;
+        let textToShare = `🧠 Tôi vừa đạt IQ ${currentIQ} (Danh hiệu: ${rankText}) trên phần mềm KHO BÁU TRI THỨC Pro!\nGiỏi thì vượt qua tôi đi! 🔥`;
+        
+        const textArea = document.createElement("textarea");
+        textArea.value = textToShare;
+        textArea.style.position = "fixed"; textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.focus(); textArea.select();
+        
+        try {
+            document.execCommand('copy');
+            showToast("✅ Đã copy kết quả vào khay nhớ tạm!");
+        } catch (err) { alert("❌ Trình duyệt không hỗ trợ copy."); }
+        document.body.removeChild(textArea);
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        if(msg) toast.innerText = msg;
+        toast.classList.add('show');
+        setTimeout(() => { toast.classList.remove('show'); }, 3000);
+    }
+
+    function viewLeaderboard() {
+        document.getElementById('intro-screen').classList.add('hidden');
+        if (window.globalLeaderboardData) {
+            window.renderLeaderboardUI(window.globalLeaderboardData);
+        } else {
+            const lbScreen = document.getElementById('leaderboard-screen');
+            lbScreen.classList.remove('hidden'); lbScreen.classList.add('animate-pop'); lbScreen.classList.add('flex');
+            
+            let localFallback = JSON.parse(localStorage.getItem('iqLeaderboard_v2')) || [];
+            if(localFallback.length > 0 && !window.db) window.renderLeaderboardUI(localFallback);
+        }
+    }
+
+    async function saveScore() {
+        if (currentRunId) return showToast("⚠️ Bạn đã lưu điểm rồi!");
+        
+        let nameInput = document.getElementById('player-name').value.trim();
+        if (!nameInput) nameInput = "Học trò bí ẩn";
+
+        currentRunId = Date.now();
+        let record = { id: currentRunId, name: nameInput, iq: currentIQ, date: new Date().toLocaleDateString('vi-VN') };
+        
+        let savedToCloud = false;
+        if(window.saveToFirebase) {
+            const btn = document.querySelector('#save-score-section button');
+            let oldText = btn.innerHTML;
+            btn.innerHTML = '⏳ Đang truyền dữ liệu lên vệ tinh...';
+            savedToCloud = await window.saveToFirebase(record);
+            btn.innerHTML = oldText;
+        }
+
+        if(savedToCloud) {
+            showToast("🌐 Đã lưu lên Bảng xếp hạng trực tuyến!");
+            viewLeaderboard();
+        } else {
+            let leaderboard = JSON.parse(localStorage.getItem('iqLeaderboard_v2')) || [];
+            leaderboard.push(record);
+            leaderboard.sort((a, b) => b.iq - a.iq);
+            leaderboard = leaderboard.slice(0, 30); 
+            localStorage.setItem('iqLeaderboard_v2', JSON.stringify(leaderboard));
+            showToast("💾 Đã lưu Local (Chế độ Offline)");
+            window.renderLeaderboardUI(leaderboard);
+        }
+    }
+
+    window.renderLeaderboardUI = function(leaderboard) {
+        document.getElementById('result-screen').classList.add('hidden');
+        const lbScreen = document.getElementById('leaderboard-screen');
+        lbScreen.classList.remove('hidden'); lbScreen.classList.add('flex');
+
+        const listContainer = document.getElementById('leaderboard-list');
+        listContainer.innerHTML = '';
+
+        if(leaderboard.length === 0) {
+            listContainer.innerHTML = '<p class="text-gray-400 mt-10">Chưa có dữ liệu nào. Hãy là người đầu tiên ghi danh!</p>';
+            return;
+        }
+
+        leaderboard.forEach((player, index) => {
+            let rankColor = "text-gray-400"; let rankMedal = `${index + 1}`; let bgClass = "bg-white/5";
+
+            if (index === 0) { rankColor = "text-yellow-400 font-black text-xl"; rankMedal = "🥇"; bgClass = "bg-gradient-to-r from-yellow-500/20 to-transparent border-l-4 border-yellow-400"; }
+            else if (index === 1) { rankColor = "text-gray-300 font-black text-xl"; rankMedal = "🥈"; bgClass = "bg-gradient-to-r from-gray-400/20 to-transparent border-l-4 border-gray-300"; }
+            else if (index === 2) { rankColor = "text-orange-400 font-black text-xl"; rankMedal = "🥉"; bgClass = "bg-gradient-to-r from-orange-500/20 to-transparent border-l-4 border-orange-400"; }
+
+            const item = document.createElement('div');
+            item.className = `grid grid-cols-[1fr_4fr_2fr] gap-2 items-center px-4 py-3 mb-2 rounded-xl transition-all ${bgClass}`;
+            
+            let isCurrentPlayer = (player.id === currentRunId);
+            if(isCurrentPlayer) item.classList.add('ring-2', 'ring-emerald-500', 'shadow-[0_0_15px_rgba(16,185,129,0.3)]');
+
+            item.innerHTML = `
+                <div class="text-center ${rankColor}">${rankMedal}</div>
+                <div class="text-left font-bold text-white flex items-center">
+                    <span class="truncate max-w-[150px] sm:max-w-[200px]">${player.name}</span>
+                    ${isCurrentPlayer ? '<span class=\"ml-2 text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full shrink-0\">Bạn</span>' : ''}
+                </div>
+                <div class="text-right font-black text-cyan-400 text-base sm:text-xl">IQ ${player.iq}</div>
+            `;
+            listContainer.appendChild(item);
+        });
+    }
+
+    function toggleFullScreen() {
+        let elem = document.documentElement;
+        let btn = document.getElementById('fullscreen-toggle');
+        try {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                let req = elem.requestFullscreen ? elem.requestFullscreen() : (elem.webkitRequestFullscreen ? elem.webkitRequestFullscreen() : null);
+                if (req) req.catch(e => {}); // Bắt lỗi an toàn
+                btn.innerText = "🗗";
+            } else {
+                let req = document.exitFullscreen ? document.exitFullscreen() : (document.webkitExitFullscreen ? document.webkitExitFullscreen() : null);
+                if (req) req.catch(e => {});
+                btn.innerText = "⛶";
+            }
+        } catch(e) {}
+    }
+
+    function fireMiniConfetti() {
+        try {
+            if (typeof confetti === 'function') {
+                confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 }, colors: ['#f59e0b', '#ef4444', '#10b981', '#3b82f6'], zIndex: 1000 });
+            }
+        } catch(e){}
+    }
+
+    function fireConfetti(colors, amount) {
+        try {
+            if (typeof confetti === 'function') {
+                var duration = 4000; var end = Date.now() + duration;
+                (function frame() {
+                    confetti({ particleCount: amount / 40, angle: 60, spread: 60, origin: { x: 0 }, colors: colors, zIndex: 1000 });
+                    confetti({ particleCount: amount / 40, angle: 120, spread: 60, origin: { x: 1 }, colors: colors, zIndex: 1000 });
+                    if (Date.now() < end) requestAnimationFrame(frame);
+                }());
+            }
+        } catch(e){}
+    }
+</script>
+</body>
+</html>
